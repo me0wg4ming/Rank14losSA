@@ -131,7 +131,7 @@ Kick, Flash Bomb
 
 ## 🙏 Credits
 
-- **Original Addon**: Nogall of Feenix Warsong
+- **Original Addon**: Nogall of Feenix Warsong - https://github.com/Fiskehatt/Rank14losSA
 - **Reborn Version**: Complete rewrite with SuperWoW integration
 - **SuperWoW**: balakethelock - https://github.com/balakethelock/SuperWoW
 - **Based on**: GladiatorlosSA (Cataclysm addon)
