@@ -2,6 +2,6 @@
 ## Title: Rank14losSA
 ## Notes: Backport of GladiatorlosSA
 ## Author: Nogall of feenix Warsong
-## SavedVariables: RSAConfig
+## SavedVariables: RSAConfig, RSA_AlertFrameX, RSA_AlertFrameY, RSA_AlertFrameEnabled, RSA_AlertFrameBgAlpha
 
 RSA.xml
