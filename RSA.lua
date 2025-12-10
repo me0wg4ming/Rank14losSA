@@ -275,6 +275,7 @@ RSA_SW.BUFF_SPELL_IDS = {
 	[9863] = "Tranquility",
 	[8143] = "TremorTotem",
 	[23505] = "Trinket",
+	[52317] = "Trinket",  -- PvP Trinket - Turtle WoW
 	[7744] = "WilloftheForsaken",
 }
 
