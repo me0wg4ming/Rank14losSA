@@ -152,12 +152,9 @@ local RSA_SW = {
 	enabled = false,
 	debugMode = false,
 	inInstance = false,  -- Disabled in raid/party instances
-	guids = {},
-	enemyGuids = {},
-	trackedBuffs = {},
-	trackedDebuffs = {},
-	lastAlerts = {},
-	fadeWatchList = {},  -- GUIDs to watch for buff fading (only buffs detected via UNIT_CASTEVENT)
+	trackedDebuffs = {},  -- For player debuff scanning
+	lastAlerts = {},      -- Cooldown tracking per GUID/ability
+	fadeWatchList = {},   -- GUIDs to watch for buff fading (only buffs detected via UNIT_CASTEVENT)
 	SCAN_INTERVAL = 0.5,
 	lastCleanup = 0,
 	CLEANUP_INTERVAL = 30,
@@ -590,22 +587,23 @@ end
 function RSA_SW:CleanupMemory()
 	local now = GetTime()
 	
-	-- Cleanup old GUIDs that no longer exist
-	for guid, _ in pairs(self.guids) do
+	-- Cleanup fadeWatchList for GUIDs that no longer exist
+	for guid, _ in pairs(self.fadeWatchList) do
 		if not UnitExists(guid) then
-			self.guids[guid] = nil
-			self.enemyGuids[guid] = nil
-			self.trackedBuffs[guid] = nil
-			self.trackedDebuffs[guid] = nil
-			self.lastAlerts[guid] = nil
 			self.fadeWatchList[guid] = nil
 		end
 	end
 	
-	-- Also cleanup fadeWatchList for GUIDs not in main list
-	for guid, _ in pairs(self.fadeWatchList) do
-		if not UnitExists(guid) then
-			self.fadeWatchList[guid] = nil
+	-- Cleanup old lastAlerts entries (older than 60 seconds)
+	for guid, abilities in pairs(self.lastAlerts) do
+		for ability, timestamp in pairs(abilities) do
+			if now - timestamp > 60 then
+				abilities[ability] = nil
+			end
+		end
+		-- Remove empty GUID entries
+		if not next(abilities) then
+			self.lastAlerts[guid] = nil
 		end
 	end
 	
@@ -645,67 +643,6 @@ function RSA_SW:UpdateInstanceStatus()
 				DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00[R14 DEBUG]|r Left PvE instance - RSA enabled")
 			end
 		end
-	end
-end
-
---[[===========================================================================
-	GUID Collection
-=============================================================================]]
-
-function RSA_SW:AddUnit(unit)
-	if not unit then return end
-	
-	local exists, guid = UnitExists(unit)
-	if not exists or not guid then return end
-	
-	-- Check 1: Pet Filter (like Spy/ShaguScan)
-	-- Pet = NOT UnitIsPlayer AND UnitPlayerControlled
-	local isPlayer = UnitIsPlayer(guid)
-	local isControlled = UnitPlayerControlled(guid)
-	local isPet = not isPlayer and isControlled
-	
-	if isPet then
-		if self.debugMode then
-			local name = UnitName(guid) or "Unknown"
-			DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[R14 DEBUG]|r AddUnit skipped (pet): " .. name)
-		end
-		return
-	end
-	
-	-- Check 2: Must be a player
-	if not isPlayer then
-		if self.debugMode then
-			local name = UnitName(guid) or "Unknown"
-			DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[R14 DEBUG]|r AddUnit skipped (not a player): " .. name)
-		end
-		return
-	end
-	
-	-- Check 3: Players ALWAYS have a class - NPCs don't
-	local class = UnitClass(guid)
-	if not class then
-		if self.debugMode then
-			local name = UnitName(guid) or "Unknown"
-			DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[R14 DEBUG]|r AddUnit skipped (no class): " .. name)
-		end
-		return
-	end
-	
-	-- Check 4: Skip elite/boss/rare NPCs
-	local classification = UnitClassification(guid)
-	if classification == "elite" or classification == "worldboss" or classification == "rare" or classification == "rareelite" then
-		if self.debugMode then
-			local name = UnitName(guid) or "Unknown"
-			DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[R14 DEBUG]|r AddUnit skipped (NPC classification: " .. classification .. "): " .. name)
-		end
-		return
-	end
-	
-	-- Passed all checks - this is a real player
-	self.guids[guid] = GetTime()
-	
-	if IsEnemy(guid) then
-		self.enemyGuids[guid] = GetTime()
 	end
 end
 
@@ -836,40 +773,23 @@ scanFrame:SetScript("OnUpdate", function()
 end)
 
 --[[===========================================================================
-	GUID Collection Events
+	Event Handler
 =============================================================================]]
 
-local guidFrame = CreateFrame("Frame")
-guidFrame:RegisterEvent("UPDATE_MOUSEOVER_UNIT")
-guidFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
-guidFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-guidFrame:RegisterEvent("UNIT_AURA")
-guidFrame:RegisterEvent("UNIT_HEALTH")
-guidFrame:RegisterEvent("UNIT_CASTEVENT")
-guidFrame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+local eventFrame = CreateFrame("Frame")
+eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+eventFrame:RegisterEvent("UNIT_CASTEVENT")
+eventFrame:RegisterEvent("ZONE_CHANGED")
+eventFrame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+eventFrame:RegisterEvent("ZONE_CHANGED_INDOORS")
 
-guidFrame:SetScript("OnEvent", function()
+eventFrame:SetScript("OnEvent", function()
 	if not RSA_SW.enabled then return end
 	
-	if event == "UPDATE_MOUSEOVER_UNIT" then
-		RSA_SW:AddUnit("mouseover")
-	elseif event == "PLAYER_TARGET_CHANGED" then
-		RSA_SW:AddUnit("target")
-		RSA_SW:AddUnit("targettarget")
-	elseif event == "PLAYER_ENTERING_WORLD" then
-		RSA_SW:UpdateInstanceStatus()
-		RSA_SW:AddUnit("player")
-		RSA_SW:AddUnit("target")
-		RSA_SW:AddUnit("targettarget")
-	elseif event == "ZONE_CHANGED_NEW_AREA" then
+	if event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED" or event == "ZONE_CHANGED_NEW_AREA" or event == "ZONE_CHANGED_INDOORS" then
 		RSA_SW:UpdateInstanceStatus()
 	elseif event == "UNIT_CASTEVENT" then
 		RSA_SW:OnUnitCastEvent(arg1, arg2, arg3, arg4, arg5)
-	else
-		local unit = arg1
-		if unit then
-			RSA_SW:AddUnit(unit)
-		end
 	end
 end)
 
@@ -880,6 +800,25 @@ end)
 function RSA_SW:OnUnitCastEvent(casterGUID, targetGUID, eventType, spellID, castDuration)
 	-- Safety checks
 	if not spellID or not casterGUID then return end
+	
+	-- Handle FAIL event - cancel castbar if the cast was interrupted
+	if eventType == "FAIL" then
+		if RSA_AlertFrame and RSA_AlertFrame:IsVisible() and RSA_AlertFrame.isCasting then
+			-- Check if this FAIL is from the caster we're tracking
+			if RSA_AlertFrame.trackingGUID == casterGUID then
+				RSA_AlertFrame.isCasting = false
+				RSA_AlertFrame.bar:SetWidth(0)
+				RSA_AlertFrame.timerText:SetText("")
+				RSA_AlertFrame:Hide()
+				if self.debugMode then
+					local casterName = UnitName(casterGUID) or "Unknown"
+					DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[R14 DEBUG]|r CAST FAILED/INTERRUPTED: " .. casterName)
+				end
+			end
+		end
+		return
+	end
+	
 	if eventType ~= "START" and eventType ~= "CAST" then return end
 	
 	-- Skip if in PvE instance
@@ -935,7 +874,6 @@ function RSA_SW:OnUnitCastEvent(casterGUID, targetGUID, eventType, spellID, cast
 			DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[R14 DEBUG]|r Sound disabled in config for: " .. useConfigKey)
 		end
 		
-		self:AddUnit(casterGUID)
 		return
 	end
 	
@@ -949,19 +887,18 @@ function RSA_SW:OnUnitCastEvent(casterGUID, targetGUID, eventType, spellID, cast
 		if targetGUID ~= playerGuid then return end
 		
 		if self.debugMode then
-			DEFAULT_CHAT_FRAME:AddMessage("|cff00ffff[R14 DEBUG]|r CAST START: " .. casterName .. " -> " .. castConfigKey .. " (on YOU)")
+			DEFAULT_CHAT_FRAME:AddMessage("|cff00ffff[R14 DEBUG]|r CAST START: " .. casterName .. " -> " .. castConfigKey .. " (on YOU) Duration: " .. (castDuration or 0) .. "ms")
 		end
 		
 		if RSAConfig.casts.enabled and RSAConfig.casts[castConfigKey] and CanAlert(casterGUID, castConfigKey, "cast") then
 			if self.debugMode then
 				DEFAULT_CHAT_FRAME:AddMessage("|cffff00ff[R14 DEBUG]|r Playing sound: " .. castConfigKey .. ".mp3")
 			end
-			RSA_PlaySoundFile(castConfigKey, casterName, casterGUID)
+			RSA_PlaySoundFile(castConfigKey, casterName, casterGUID, castDuration)
 		elseif self.debugMode then
 			DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[R14 DEBUG]|r Sound disabled in config for: " .. castConfigKey)
 		end
 		
-		self:AddUnit(casterGUID)
 		return
 	end
 	
@@ -995,7 +932,6 @@ function RSA_SW:OnUnitCastEvent(casterGUID, targetGUID, eventType, spellID, cast
 			end
 		end
 		
-		self:AddUnit(casterGUID)
 		return
 	end
 	
@@ -1017,7 +953,7 @@ function RSA_SW:Initialize()
 	if hasSuperWoW then
 		self.enabled = true
 		scanFrame:Show()
-		guidFrame:Show()
+		eventFrame:Show()
 		print("|cff00ff00[RSA]|r SuperWoW detected - Enhanced mode active!")
 		return true
 	else
@@ -1029,14 +965,14 @@ end
 function RSA_SW:Enable()
 	if self.enabled then
 		scanFrame:Show()
-		guidFrame:Show()
+		eventFrame:Show()
 	end
 end
 
 function RSA_SW:Disable()
 	if self.enabled then
 		scanFrame:Hide()
-		guidFrame:Hide()
+		eventFrame:Hide()
 	end
 end
 
@@ -1116,7 +1052,7 @@ function RSA_OnEvent(event)
 			
 			-- âœ… Hide frames
 			if scanFrame then scanFrame:Hide() end
-			if guidFrame then guidFrame:Hide() end
+			if eventFrame then eventFrame:Hide() end
 			
 			-- âœ… Disable config
 			if RSAConfig then
@@ -1334,38 +1270,51 @@ function RSA_CreateAlertFrame()
 	if RSA_AlertFrame then return end
 	
 	RSA_AlertFrame = CreateFrame("Frame", "RSAAlertFrame", UIParent)
-	RSA_AlertFrame:SetWidth(400)
-	RSA_AlertFrame:SetHeight(50)
+	RSA_AlertFrame:SetWidth(300)
+	RSA_AlertFrame:SetHeight(32)
 	RSA_AlertFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 200)
 	RSA_AlertFrame:SetMovable(true)
-	RSA_AlertFrame:EnableMouse(false)  -- Only enable mouse in move mode
+	RSA_AlertFrame:EnableMouse(false)
 	RSA_AlertFrame:SetClampedToScreen(true)
 	RSA_AlertFrame:RegisterForDrag("LeftButton")
 	RSA_AlertFrame:SetFrameStrata("HIGH")
 	
-	-- Make frame click-through (huge insets = no hit area)
+	-- Make frame click-through
 	RSA_AlertFrame:SetHitRectInsets(10000, 10000, 10000, 10000)
 	
-	-- Background (no border like Snowball addon)
-	RSA_AlertFrame:SetBackdrop({
-		bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
-		edgeFile = nil,
-		tile = false,
-		insets = { left = 0, right = 0, top = 0, bottom = 0 }
-	})
-	RSA_AlertFrame:SetBackdropColor(0, 0, 0, RSA_AlertFrameBgAlpha)
+	-- No backdrop - only the bar shows color
 	
-	-- Spell Icon
-	RSA_AlertFrame.icon = RSA_AlertFrame:CreateTexture(nil, "ARTWORK")
+	-- Castbar fill (colored, grows from left to right)
+	RSA_AlertFrame.bar = RSA_AlertFrame:CreateTexture(nil, "BACKGROUND")
+	RSA_AlertFrame.bar:SetTexture("Interface\\TargetingFrame\\UI-StatusBar")
+	local alpha = RSA_AlertFrameBgAlpha or 0.7
+	RSA_AlertFrame.bar:SetVertexColor(1.0, 0.7, 0.0, alpha)
+	RSA_AlertFrame.bar:SetPoint("LEFT", RSA_AlertFrame, "LEFT", 0, 0)
+	RSA_AlertFrame.bar:SetHeight(32)
+	RSA_AlertFrame.bar:SetWidth(0)
+	
+	-- Spell Icon (left side)
+	RSA_AlertFrame.icon = RSA_AlertFrame:CreateTexture(nil, "OVERLAY")
 	RSA_AlertFrame.icon:SetWidth(32)
 	RSA_AlertFrame.icon:SetHeight(32)
+	RSA_AlertFrame.icon:SetPoint("LEFT", RSA_AlertFrame, "LEFT", 0, 0)
 	RSA_AlertFrame.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
 	
-	-- Alert Text
-	RSA_AlertFrame.text = RSA_AlertFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+	-- Alert Text (left side, after icon) - smaller font
+	RSA_AlertFrame.text = RSA_AlertFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	RSA_AlertFrame.text:SetPoint("LEFT", RSA_AlertFrame.icon, "RIGHT", 8, 0)
 	RSA_AlertFrame.text:SetText("")
-	RSA_AlertFrame.text:SetTextColor(1, 0.8, 0)
+	RSA_AlertFrame.text:SetTextColor(1, 1, 1)
+	RSA_AlertFrame.text:SetShadowOffset(1, -1)
+	RSA_AlertFrame.text:SetShadowColor(0, 0, 0, 1)
+	
+	-- Timer Text (right side, shows "0.7 / 1.4") - smaller font
+	RSA_AlertFrame.timerText = RSA_AlertFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	RSA_AlertFrame.timerText:SetPoint("RIGHT", RSA_AlertFrame, "RIGHT", -8, 0)
+	RSA_AlertFrame.timerText:SetText("")
+	RSA_AlertFrame.timerText:SetTextColor(1, 1, 1)
+	RSA_AlertFrame.timerText:SetShadowOffset(1, -1)
+	RSA_AlertFrame.timerText:SetShadowColor(0, 0, 0, 1)
 	
 	-- Drag scripts
 	RSA_AlertFrame:SetScript("OnDragStart", function()
@@ -1384,23 +1333,51 @@ function RSA_CreateAlertFrame()
 	
 	RSA_AlertFrame:Hide()
 	RSA_AlertFrame.fadeTime = 0
+	RSA_AlertFrame.castTime = 0      -- Total cast duration
+	RSA_AlertFrame.castElapsed = 0   -- Time elapsed since cast start
+	RSA_AlertFrame.isCasting = false -- Is this a cast with a bar?
 	
-	-- Fade out animation
+	-- OnUpdate for castbar animation and fade
 	RSA_AlertFrame:SetScript("OnUpdate", function()
 		if not this:IsVisible() then return end
 		
-		this.fadeTime = this.fadeTime + arg1
+		local elapsed = arg1
 		
-		if this.fadeTime > 4 then
-			local alpha = 1 - ((this.fadeTime - 4) / 1)
-			if alpha <= 0 then
-				this:Hide()
-				this:SetAlpha(1)
+		-- Castbar animation (if this is a cast)
+		if this.isCasting and this.castTime > 0 then
+			this.castElapsed = this.castElapsed + elapsed
+			local progress = this.castElapsed / this.castTime
+			
+			-- Update timer text
+			local remaining = string.format("%.1f / %.1f", this.castElapsed, this.castTime)
+			this.timerText:SetText(remaining)
+			
+			if progress >= 1 then
+				-- Cast finished, fill bar completely
+				this.bar:SetWidth(this:GetWidth())
+				this.isCasting = false
+				this.timerText:SetText("")
+				-- Start fade timer
+				this.fadeTime = 0
 			else
-				this:SetAlpha(alpha)
+				-- Update bar width (left to right)
+				local barWidth = this:GetWidth() * progress
+				this.bar:SetWidth(barWidth)
 			end
 		else
-			this:SetAlpha(1)
+			-- Normal fade out (for instant abilities or after cast completes)
+			this.fadeTime = this.fadeTime + elapsed
+			
+			if this.fadeTime > 2 then
+				local alpha = 1 - ((this.fadeTime - 2) / 0.5)
+				if alpha <= 0 then
+					this:Hide()
+					this:SetAlpha(1)
+					this.bar:SetWidth(0)
+				else
+					this:SetAlpha(alpha)
+				end
+			end
 		end
 	end)
 	
@@ -1498,10 +1475,10 @@ local RSA_SPELL_ICONS = {
 	["FlashBomb"] = "Interface\\Icons\\INV_Misc_Bomb_08",
 }
 
-function RSA_ShowAlert(spellName, playerName, casterGUID)
+function RSA_ShowAlert(spellName, playerName, casterGUID, castDuration)
 	if not RSA_AlertFrame then return end
 	if not RSA_AlertFrameEnabled then return end
-	if RSA_MoveMode then return end  -- Don't show alerts in move mode
+	if RSA_MoveMode then return end
 	
 	-- Check if this caster is our current target
 	local isTarget = false
@@ -1512,18 +1489,27 @@ function RSA_ShowAlert(spellName, playerName, casterGUID)
 		end
 	end
 	
-	-- Target priority: Only allow non-target alerts to override if current alert is also non-target
-	-- or if the current alert has been showing for at least 1 second
-	if RSA_AlertFrame:IsVisible() and not isTarget then
+	-- Determine if this new alert is a cast (has duration and not a fade)
+	local isFadeCheck = spellName and string.sub(spellName, -4) == "down"
+	local isNewCast = castDuration and castDuration > 0 and not isFadeCheck
+	
+	-- CAST PRIORITY: If a cast is currently showing, don't let buffs/fades override it
+	if RSA_AlertFrame:IsVisible() and RSA_AlertFrame.isCasting then
+		-- Only allow another cast to override, or if current cast is nearly done
+		if not isNewCast and RSA_AlertFrame.castElapsed < (RSA_AlertFrame.castTime - 0.3) then
+			return  -- Block buff/fade from overriding active cast
+		end
+	end
+	
+	-- Target priority (only for non-cast alerts)
+	if RSA_AlertFrame:IsVisible() and not isTarget and not isNewCast then
 		if RSA_AlertFrame.isTargetAlert and RSA_AlertFrame.fadeTime < 1 then
-			-- Current alert is from target and still fresh, don't override
 			return
 		end
 	end
 	
 	-- Format spell name for display
 	local displayName = spellName
-	-- Check for "down" suffix (fading buffs)
 	local isFade = false
 	if string.sub(displayName, -4) == "down" then
 		displayName = string.sub(displayName, 1, -5)
@@ -1534,7 +1520,7 @@ function RSA_ShowAlert(spellName, playerName, casterGUID)
 	local iconPath = RSA_SPELL_ICONS[displayName] or "Interface\\Icons\\INV_Misc_QuestionMark"
 	RSA_AlertFrame.icon:SetTexture(iconPath)
 	
-	-- Build alert text: "Name casts Spell" or "Name's Spell fades"
+	-- Build alert text
 	local alertText
 	if isFade then
 		if playerName and playerName ~= "" and playerName ~= "Unknown" then
@@ -1543,20 +1529,51 @@ function RSA_ShowAlert(spellName, playerName, casterGUID)
 			alertText = displayName .. " fades"
 		end
 	elseif playerName and playerName ~= "" and playerName ~= "Unknown" then
-		alertText = playerName .. " casts " .. displayName
+		alertText = playerName .. " - " .. displayName
 	else
 		alertText = displayName
 	end
 	
 	RSA_AlertFrame.text:SetText(alertText)
 	
-	-- Center icon + text in frame
+	-- Resize frame based on text width + timer space
 	local textWidth = RSA_AlertFrame.text:GetStringWidth()
-	local totalWidth = 32 + 8 + textWidth  -- icon + spacing + text
-	local offsetX = -totalWidth / 2 + 16  -- center point, +16 to account for icon center
+	local timerWidth = 55  -- Space for "0.0 / 0.0"
+	local frameWidth = math.max(220, textWidth + timerWidth + 50)  -- Min 220, add space for icon + timer
+	RSA_AlertFrame:SetWidth(frameWidth)
 	
-	RSA_AlertFrame.icon:ClearAllPoints()
-	RSA_AlertFrame.icon:SetPoint("CENTER", RSA_AlertFrame, "CENTER", offsetX, 0)
+	-- Track caster GUID for interrupt detection
+	RSA_AlertFrame.trackingGUID = casterGUID
+	
+	-- Get alpha from slider setting (for instants/fades only)
+	local sliderAlpha = RSA_AlertFrameBgAlpha or 0.7
+	
+	-- Setup castbar or instant display
+	if castDuration and castDuration > 0 and not isFade then
+		-- This is a cast with duration - animate the bar, ALWAYS visible
+		RSA_AlertFrame.castTime = castDuration / 1000  -- Convert ms to seconds
+		RSA_AlertFrame.castElapsed = 0
+		RSA_AlertFrame.isCasting = true
+		RSA_AlertFrame.bar:SetWidth(0)
+		RSA_AlertFrame.bar:SetVertexColor(1.0, 0.3, 0.0, 1.0)  -- Red/orange color
+		RSA_AlertFrame.bar:SetAlpha(0.7)  -- Transparency
+		RSA_AlertFrame.bar:Show()
+		RSA_AlertFrame.timerText:SetText("")  -- No timer for casts initially, updates in OnUpdate
+	else
+		-- Instant ability - fill bar completely, use slider alpha
+		RSA_AlertFrame.castTime = 0
+		RSA_AlertFrame.castElapsed = 0
+		RSA_AlertFrame.isCasting = false
+		RSA_AlertFrame.timerText:SetText("")  -- No timer for instants
+		RSA_AlertFrame.bar:SetWidth(RSA_AlertFrame:GetWidth())
+		RSA_AlertFrame.bar:SetAlpha(1)  -- Reset alpha for instants
+		if isFade then
+			RSA_AlertFrame.bar:SetVertexColor(0.3, 0.8, 0.3, sliderAlpha)  -- Green for fades
+		else
+			RSA_AlertFrame.bar:SetVertexColor(1.0, 0.7, 0.0, sliderAlpha)  -- Gold for buffs/instant
+		end
+		RSA_AlertFrame.bar:Show()
+	end
 	
 	RSA_AlertFrame:SetAlpha(1)
 	RSA_AlertFrame:Show()
@@ -1572,51 +1589,75 @@ function RSA_ToggleMoveMode()
 			RSA_CreateAlertFrame()
 		end
 		RSA_AlertFrame:EnableMouse(true)
-		RSA_AlertFrame:SetHitRectInsets(0, 0, 0, 0)  -- Enable clicking
+		RSA_AlertFrame:SetHitRectInsets(0, 0, 0, 0)
 		
-		-- Set move mode text and center it with icon
-		local moveText = ">> DRAG TO MOVE <<"
-		RSA_AlertFrame.text:SetText(moveText)
+		-- Set move mode display
+		RSA_AlertFrame.text:SetText(">> DRAG TO MOVE <<")
 		RSA_AlertFrame.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
-		
-		-- Center icon + text
-		local textWidth = RSA_AlertFrame.text:GetStringWidth()
-		local totalWidth = 32 + 8 + textWidth
-		local offsetX = -totalWidth / 2 + 16
-		RSA_AlertFrame.icon:ClearAllPoints()
-		RSA_AlertFrame.icon:SetPoint("CENTER", RSA_AlertFrame, "CENTER", offsetX, 0)
+		RSA_AlertFrame:SetWidth(250)
+		RSA_AlertFrame.bar:SetWidth(250)
+		RSA_AlertFrame.bar:SetAlpha(1)
+		local alpha = RSA_AlertFrameBgAlpha or 0.7
+		RSA_AlertFrame.bar:SetVertexColor(0.5, 0.5, 0.5, alpha)
+		RSA_AlertFrame.isCasting = false
+		RSA_AlertFrame.timerText:SetText("")
 		
 		RSA_AlertFrame:SetAlpha(1)
 		RSA_AlertFrame:Show()
-		RSA_AlertFrame:SetScript("OnUpdate", nil)  -- Disable fade while moving
+		RSA_AlertFrame:SetScript("OnUpdate", nil)
 		DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00[RSA]|r Alert Frame move mode |cff00ff00ENABLED|r - Drag to reposition")
 	else
 		RSA_AlertFrame:EnableMouse(false)
-		RSA_AlertFrame:SetHitRectInsets(10000, 10000, 10000, 10000)  -- Disable clicking (click-through)
+		RSA_AlertFrame:SetHitRectInsets(10000, 10000, 10000, 10000)
 		RSA_AlertFrame:Hide()
-		-- Re-enable fade script
+		RSA_AlertFrame.bar:SetWidth(0)
+		RSA_AlertFrame.timerText:SetText("")
+		
+		-- Re-enable OnUpdate script
 		RSA_AlertFrame:SetScript("OnUpdate", function()
 			if not this:IsVisible() then return end
-			this.fadeTime = this.fadeTime + arg1
-			if this.fadeTime > 4 then
-				local alpha = 1 - ((this.fadeTime - 4) / 1)
-				if alpha <= 0 then
-					this:Hide()
-					this:SetAlpha(1)
+			
+			local elapsed = arg1
+			
+			if this.isCasting and this.castTime > 0 then
+				this.castElapsed = this.castElapsed + elapsed
+				local progress = this.castElapsed / this.castTime
+				
+				-- Update timer text
+				local remaining = string.format("%.1f / %.1f", this.castElapsed, this.castTime)
+				this.timerText:SetText(remaining)
+				
+				if progress >= 1 then
+					this.bar:SetWidth(this:GetWidth())
+					this.isCasting = false
+					this.timerText:SetText("")
+					this.fadeTime = 0
 				else
-					this:SetAlpha(alpha)
+					local barWidth = this:GetWidth() * progress
+					this.bar:SetWidth(barWidth)
 				end
 			else
-				this:SetAlpha(1)
+				this.fadeTime = this.fadeTime + elapsed
+				
+				if this.fadeTime > 2 then
+					local alpha = 1 - ((this.fadeTime - 2) / 0.5)
+					if alpha <= 0 then
+						this:Hide()
+						this:SetAlpha(1)
+						this.bar:SetWidth(0)
+					else
+						this:SetAlpha(alpha)
+					end
+				end
 			end
 		end)
 		DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00[RSA]|r Alert Frame move mode |cffff0000DISABLED|r - Position saved")
 	end
 end
 
-function RSA_PlaySoundFile(spell, playerName, casterGUID)
-	-- Show visual alert with player name and GUID for target priority
-	RSA_ShowAlert(spell, playerName, casterGUID)
+function RSA_PlaySoundFile(spell, playerName, casterGUID, castDuration)
+	-- Show visual alert with player name, GUID for target priority, and cast duration
+	RSA_ShowAlert(spell, playerName, casterGUID, castDuration)
 	
 	local mp3Path = "Interface\\AddOns\\Rank14losSA\\Voice\\"..spell..".mp3"
 	local success = PlaySoundFile(mp3Path, "Master")
@@ -1751,10 +1792,11 @@ function RSAMenuFrame_Update()
 			RSA_AlertFrameBgAlpha = (displayVal / 100) * 0.7
 			
 			-- Update label
-			_G[this:GetName().."Text"]:SetText("Background: " .. math.floor(displayVal) .. "%")
+			_G[this:GetName().."Text"]:SetText("Bar Opacity: " .. math.floor(displayVal) .. "%")
 			
-			if RSA_AlertFrame then
-				RSA_AlertFrame:SetBackdropColor(0, 0, 0, RSA_AlertFrameBgAlpha)
+			-- Update bar live if visible
+			if RSA_AlertFrame and RSA_AlertFrame:IsVisible() then
+				RSA_AlertFrame.bar:SetVertexColor(0.5, 0.5, 0.5, RSA_AlertFrameBgAlpha)
 			end
 		end)
 		
@@ -1763,7 +1805,7 @@ function RSAMenuFrame_Update()
 		-- Convert stored alpha to display value
 		local displayValue = (RSA_AlertFrameBgAlpha / 0.7) * 100
 		RSAMenuFrame.alphaSlider:SetValue(displayValue)
-		_G[RSAMenuFrame.alphaSlider:GetName().."Text"]:SetText("Background: " .. math.floor(displayValue) .. "%")
+		_G[RSAMenuFrame.alphaSlider:GetName().."Text"]:SetText("Bar Opacity: " .. math.floor(displayValue) .. "%")
 	end
 	
 	RSAMenuFrame_UpdateDependencies()
