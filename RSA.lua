@@ -968,6 +968,9 @@ function RSA_SW:OnUnitCastEvent(casterGUID, targetGUID, eventType, spellID, cast
 	-- Check targeted casts (only alert if YOU are target)
 	local castConfigKey = self.CAST_SPELL_IDS[spellID]
 	if castConfigKey then
+		-- Only alert on START, not on CAST completion (prevents double alerts)
+		if eventType ~= "START" then return end
+		
 		local _, playerGuid = UnitExists("player")
 		if targetGUID ~= playerGuid then return end
 		
