@@ -156,6 +156,7 @@ local RSA_SW = {
 	trackedBuffs = {},
 	trackedDebuffs = {},
 	lastAlerts = {},
+	fadeWatchList = {},  -- GUIDs to watch for buff fading (only buffs detected via UNIT_CASTEVENT)
 	SCAN_INTERVAL = 0.5,
 	lastCleanup = 0,
 	CLEANUP_INTERVAL = 30,
@@ -324,64 +325,6 @@ RSA_SW.USE_SPELL_IDS = {
 	[24133] = "WyvernSting",
 }
 
--- Buff name mappings (English only, optimized for direct lookup)
-RSA_SW.BUFF_NAMES = {
-	["adrenaline rush"] = "AdrenalineRush",
-	["arcane power"] = "ArcanePower",
-	["barkskin"] = "Barkskin",
-	["barkskin (feral)"] = "Barkskin",  -- Turtle WoW custom
-	["battle stance"] = "BattleStance",
-	["berserker rage"] = "BerserkerRage",
-	["berserker stance"] = "BerserkerStance",
-	["bestial wrath"] = "BestialWrath",
-	["blade flurry"] = "BladeFlurry",
-	["blessing of freedom"] = "BlessingofFreedom",
-	["blessing of protection"] = "BlessingofProtection",
-	["cannibalize"] = "Cannibalize",
-	["cold blood"] = "ColdBlood",
-	["combustion"] = "Combustion",
-	["dash"] = "Dash",
-	["death wish"] = "DeathWish",
-	["defensive stance"] = "DefensiveStance",
-	["desperate prayer"] = "DesperatePrayer",
-	["deterrence"] = "Deterrence",
-	["divine favor"] = "DivineFavor",
-	["divine shield"] = "DivineShield",
-	["earthbind totem"] = "EarthbindTotem",
-	["elemental mastery"] = "ElementalMastery",
-	["evasion"] = "Evasion",
-	["evocation"] = "Evocation",
-	["fear ward"] = "FearWard",
-	["first aid"] = "FirstAid",
-	["frenzied regeneration"] = "FrenziedRegeneration",
-	["freezing trap"] = "FreezingTrap",
-	["grounding totem"] = "GroundingTotem",
-	["ice block"] = "IceBlock",
-	["inner focus"] = "InnerFocus",
-	["innervate"] = "Innervate",
-	["intimidation"] = "Intimidation",
-	["last stand"] = "LastStand",
-	["mana tide totem"] = "ManaTideTotem",
-	["nature's grasp"] = "Nature'sGrasp",
-	["nature's swiftness"] = "Nature'sSwiftness",
-	["power infusion"] = "PowerInfusion",
-	["presence of mind"] = "PresenceofMind",
-	["rapid fire"] = "RapidFire",
-	["recklessness"] = "Recklessness",
-	["retaliation"] = "Retaliation",
-	["sacrifice"] = "Sacrifice",
-	["shield wall"] = "ShieldWall",
-	["sprint"] = "Sprint",
-	["stone form"] = "Stoneform",
-	["stoneform"] = "Stoneform",
-	["sweeping strikes"] = "SweepingStrikes",
-	["tranquility"] = "Tranquility",
-	["tremor totem"] = "TremorTotem",
-	["will of the forsaken"] = "WilloftheForsaken",
-	["immune"] = "Trinket",
-	["reflector"] = "Reflector",
-}
-
 -- Debuff name mappings (only for debuffs that can't be detected via UNIT_CASTEVENT)
 -- Most instant CC abilities are now detected via USE_SPELL_IDS for correct caster name
 RSA_SW.DEBUFF_NAMES = {
@@ -390,8 +333,20 @@ RSA_SW.DEBUFF_NAMES = {
 	["seduction"] = "Seduction",  -- Succubus cast, detected via debuff
 }
 
+-- ConfigKey → Buff name patterns for fading detection (lowercase for matching)
+-- Only buffs that have fading alerts enabled need to be here
+RSA_SW.FADE_BUFF_PATTERNS = {
+	["Barkskin"] = "barkskin",
+	["BlessingofProtection"] = "blessing of protection",
+	["Deterrence"] = "deterrence",
+	["DivineShield"] = "divine shield",
+	["Evasion"] = "evasion",
+	["IceBlock"] = "ice block",
+	["ShieldWall"] = "shield wall",
+}
+
 --[[===========================================================================
-	Tooltip Scanner
+	Tooltip Scanner (for buff fading and debuff detection)
 =============================================================================]]
 
 local RSABuffScanner = CreateFrame("GameTooltip", "RSABuffScanner", nil, "GameTooltipTemplate")
@@ -642,6 +597,14 @@ function RSA_SW:CleanupMemory()
 			self.trackedBuffs[guid] = nil
 			self.trackedDebuffs[guid] = nil
 			self.lastAlerts[guid] = nil
+			self.fadeWatchList[guid] = nil
+		end
+	end
+	
+	-- Also cleanup fadeWatchList for GUIDs not in main list
+	for guid, _ in pairs(self.fadeWatchList) do
+		if not UnitExists(guid) then
+			self.fadeWatchList[guid] = nil
 		end
 	end
 	
@@ -710,82 +673,7 @@ function RSA_SW:AddUnit(unit)
 end
 
 --[[===========================================================================
-	Buff Scanner
-=============================================================================]]
-
-function RSA_SW:ScanBuffs(guid)
-	if not UnitExists(guid) then
-		-- Cleanup on non-existent GUID
-		self.trackedBuffs[guid] = nil
-		self.lastAlerts[guid] = nil
-		return
-	end
-	
-	if not IsEnemy(guid) then return end
-	
-	local currentBuffs = {}
-	local playerName = UnitName(guid) or "Unknown"
-	
-	for i = 1, MAX_BUFFS do
-		local buffName = ScanBuffName(guid, i)
-		if buffName then
-			local nameLower = strlower(buffName)
-			
-			-- Optimized: Direct lookup instead of loop
-			local configKey = RSA_SW.BUFF_NAMES[nameLower]
-			if configKey then
-				currentBuffs[configKey] = true
-				
-				local isAlreadyTracked = self.trackedBuffs[guid] and self.trackedBuffs[guid][configKey]
-				
-				if not isAlreadyTracked then
-					if self.debugMode then
-						DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00[R14 DEBUG]|r NEW BUFF (Scanner): " .. playerName .. " -> " .. configKey)
-					end
-					
-					if RSAConfig.buffs.enabled and RSAConfig.buffs[configKey] and CanAlert(guid, configKey, "buff") then
-						if self.debugMode then
-							DEFAULT_CHAT_FRAME:AddMessage("|cffff00ff[R14 DEBUG]|r Playing sound: " .. configKey .. ".mp3")
-						end
-						RSA_PlaySoundFile(configKey, playerName, guid)
-					elseif self.debugMode then
-						DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[R14 DEBUG]|r Sound disabled in config for: " .. configKey)
-					end
-				end
-			end
-		end
-	end
-	
-	-- Check for faded buffs
-	if self.trackedBuffs[guid] then
-		for configKey, _ in pairs(self.trackedBuffs[guid]) do
-			if not currentBuffs[configKey] then
-				if self.debugMode then
-					DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[R14 DEBUG]|r BUFF FADED: " .. playerName .. " -> " .. configKey)
-				end
-				
-				if RSAConfig.fadingBuffs.enabled and RSAConfig.fadingBuffs[configKey] then
-					local fadeKey = configKey .. "_fade"
-					if CanAlert(guid, fadeKey, "fade") then
-						if self.debugMode then
-							DEFAULT_CHAT_FRAME:AddMessage("|cffff00ff[R14 DEBUG]|r Playing sound: " .. configKey .. "down.mp3")
-						end
-						RSA_PlaySoundFile(configKey.."down", playerName, guid)
-					elseif self.debugMode then
-						DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[R14 DEBUG]|r Fade sound on cooldown: " .. configKey)
-					end
-				elseif self.debugMode then
-					DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[R14 DEBUG]|r Fade sound disabled in config for: " .. configKey)
-				end
-			end
-		end
-	end
-	
-	self.trackedBuffs[guid] = currentBuffs
-end
-
---[[===========================================================================
-	Debuff Scanner
+	Debuff Scanner (player only)
 =============================================================================]]
 
 function RSA_SW:ScanDebuffs(guid)
@@ -839,7 +727,9 @@ local scanFrame = CreateFrame("Frame")
 local scanTimer = 0
 
 scanFrame:SetScript("OnUpdate", function()
+	-- Check BOTH RSA_SW.enabled AND RSAConfig.enabled
 	if not RSA_SW.enabled then return end
+	if not RSAConfig or not RSAConfig.enabled then return end
 	
 	scanTimer = scanTimer + arg1
 	if scanTimer < RSA_SW.SCAN_INTERVAL then return end
@@ -851,45 +741,51 @@ scanFrame:SetScript("OnUpdate", function()
 		RSA_SW:CleanupMemory()
 	end
 	
-	-- Scan enemy buffs
-	for guid, _ in pairs(RSA_SW.enemyGuids) do
+	-- Scan fade watch list (only GUIDs that had buffs detected via UNIT_CASTEVENT)
+	for guid, watchData in pairs(RSA_SW.fadeWatchList) do
 		if UnitExists(guid) then
-			RSA_SW:ScanBuffs(guid)
+			-- Check if buff is still present
+			local buffFound = false
+			for i = 1, 32 do
+				local buffName = ScanBuffName(guid, i)
+				if buffName then
+					local nameLower = strlower(buffName)
+					if strfind(nameLower, watchData.pattern) then
+						buffFound = true
+						break
+					end
+				end
+			end
+			
+			-- Buff is gone - trigger fade alert
+			if not buffFound then
+				if RSA_SW.debugMode then
+					DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[R14 DEBUG]|r BUFF FADED: " .. watchData.playerName .. " -> " .. watchData.configKey)
+				end
+				
+				local fadeKey = watchData.configKey .. "_fade"
+				if CanAlert(guid, fadeKey, "fade") then
+					if RSA_SW.debugMode then
+						DEFAULT_CHAT_FRAME:AddMessage("|cffff00ff[R14 DEBUG]|r Playing sound: " .. watchData.configKey .. "down.mp3")
+					end
+					RSA_PlaySoundFile(watchData.configKey .. "down", watchData.playerName, guid)
+				end
+				
+				-- Remove from watch list
+				RSA_SW.fadeWatchList[guid] = nil
+			end
 		else
-			RSA_SW.enemyGuids[guid] = nil
-			RSA_SW.trackedBuffs[guid] = nil
-			RSA_SW.lastAlerts[guid] = nil
+			-- GUID no longer exists, remove from watch list
+			RSA_SW.fadeWatchList[guid] = nil
 		end
 	end
 	
-	-- Scan party debuffs
-	for i = 1, 4 do
-		local unit = "party"..i
-		if UnitExists(unit) then
-			local _, guid = UnitExists(unit)
-			if guid then
-				RSA_SW:AddUnit(unit)
-				RSA_SW:ScanDebuffs(guid)
-			end
+	-- Scan player debuffs only (for Counterspell-Silenced, Repentance, Seduction)
+	if RSAConfig.debuffs and RSAConfig.debuffs.enabled then
+		local _, playerGuid = UnitExists("player")
+		if playerGuid then
+			RSA_SW:ScanDebuffs(playerGuid)
 		end
-	end
-	
-	-- Scan raid debuffs
-	for i = 1, 40 do
-		local unit = "raid"..i
-		if UnitExists(unit) then
-			local _, guid = UnitExists(unit)
-			if guid then
-				RSA_SW:AddUnit(unit)
-				RSA_SW:ScanDebuffs(guid)
-			end
-		end
-	end
-	
-	-- Scan player debuffs
-	local _, playerGuid = UnitExists("player")
-	if playerGuid then
-		RSA_SW:ScanDebuffs(playerGuid)
 	end
 end)
 
@@ -1032,13 +928,18 @@ function RSA_SW:OnUnitCastEvent(casterGUID, targetGUID, eventType, spellID, cast
 			DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[R14 DEBUG]|r Sound disabled in config for: " .. buffConfigKey)
 		end
 		
-		if not self.trackedBuffs[casterGUID] then
-			self.trackedBuffs[casterGUID] = {}
-		end
-		self.trackedBuffs[casterGUID][buffConfigKey] = true
-		
-		if self.debugMode then
-			DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00[R14 DEBUG]|r Buff tracked for fade detection: " .. buffConfigKey)
+		-- Add to fade watch list if this buff has fading enabled
+		if RSAConfig.fadingBuffs and RSAConfig.fadingBuffs.enabled and RSAConfig.fadingBuffs[buffConfigKey] then
+			if self.FADE_BUFF_PATTERNS[buffConfigKey] then
+				self.fadeWatchList[casterGUID] = {
+					configKey = buffConfigKey,
+					playerName = casterName,
+					pattern = self.FADE_BUFF_PATTERNS[buffConfigKey],
+				}
+				if self.debugMode then
+					DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00[R14 DEBUG]|r Added to fade watch list: " .. casterName .. " -> " .. buffConfigKey)
+				end
+			end
 		end
 		
 		self:AddUnit(casterGUID)
