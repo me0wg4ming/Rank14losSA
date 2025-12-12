@@ -772,10 +772,16 @@ scanFrame:SetScript("OnUpdate", function()
 				end
 				
 				-- Remove from watch list
+				if RSA_SW.debugMode then
+					DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[R14 DEBUG]|r Removed from fade watch list: " .. watchData.playerName .. " -> " .. watchData.configKey)
+				end
 				RSA_SW.fadeWatchList[guid] = nil
 			end
 		else
 			-- GUID no longer exists, remove from watch list
+			if RSA_SW.debugMode and watchData then
+				DEFAULT_CHAT_FRAME:AddMessage("|cffff0000[R14 DEBUG]|r Removed from fade watch list (GUID gone): " .. watchData.playerName .. " -> " .. watchData.configKey)
+			end
 			RSA_SW.fadeWatchList[guid] = nil
 		end
 	end
