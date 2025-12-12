@@ -279,14 +279,49 @@ RSA_SW.BUFF_SPELL_IDS = {
 	[7744] = "WilloftheForsaken",
 }
 
--- Item/Ability Use Spell IDs (Flash Bomb, Kick, etc.)
+-- Item/Ability Use Spell IDs (instant abilities that apply debuffs)
 RSA_SW.USE_SPELL_IDS = {
+	-- Items
 	[5134] = "FlashBomb",
+	-- Kick (Rogue)
 	[1766] = "Kick",
 	[1767] = "Kick",
 	[1768] = "Kick",
 	[1769] = "Kick",
 	[38768] = "Kick",
+	-- Scatter Shot (Hunter)
+	[19503] = "ScatterShot",
+	-- Blind (Rogue)
+	[2094] = "Blind",
+	-- Concussion Blow (Warrior)
+	[12809] = "ConcussionBlow",
+	-- Death Coil (Warlock)
+	[6789] = "DeathCoil",
+	[17925] = "DeathCoil",
+	[17926] = "DeathCoil",
+	-- Disarm (Warrior)
+	[676] = "Disarm",
+	-- Hammer of Justice (Paladin)
+	[853] = "HammerofJustice",
+	[5588] = "HammerofJustice",
+	[5589] = "HammerofJustice",
+	[10308] = "HammerofJustice",
+	-- Intimidating Shout (Warrior)
+	[5246] = "IntimidatingShout",
+	-- Psychic Scream (Priest)
+	[8122] = "PsychicScream",
+	[8124] = "PsychicScream",
+	[10888] = "PsychicScream",
+	[10890] = "PsychicScream",
+	-- Silence (Priest)
+	[15487] = "Silence",
+	-- Spell Lock (Felhunter)
+	[19244] = "SpellLock",
+	[19647] = "SpellLock",
+	-- Wyvern Sting (Hunter)
+	[19386] = "WyvernSting",
+	[24132] = "WyvernSting",
+	[24133] = "WyvernSting",
 }
 
 -- Buff name mappings (English only, optimized for direct lookup)
@@ -347,22 +382,12 @@ RSA_SW.BUFF_NAMES = {
 	["reflector"] = "Reflector",
 }
 
--- Debuff name mappings (English only)
+-- Debuff name mappings (only for debuffs that can't be detected via UNIT_CASTEVENT)
+-- Most instant CC abilities are now detected via USE_SPELL_IDS for correct caster name
 RSA_SW.DEBUFF_NAMES = {
-	["blind"] = "Blind",
-	["concussion blow"] = "ConcussionBlow",
-	["counterspell"] = "Counterspell-Silenced",
-	["death coil"] = "DeathCoil",
-	["disarm"] = "Disarm",
-	["hammer of justice"] = "HammerofJustice",
-	["intimidating shout"] = "IntimidatingShout",
-	["psychic scream"] = "PsychicScream",
-	["repentance"] = "Repetance",
-	["scatter shot"] = "ScatterShot",
-	["seduction"] = "Seduction",
-	["silence"] = "Silence",
-	["spell lock"] = "SpellLock",
-	["wyvern sting"] = "WyvernSting",
+	["counterspell"] = "Counterspell-Silenced",  -- Silence effect from Counterspell
+	["repentance"] = "Repetance",  -- Cast spell, detected via debuff
+	["seduction"] = "Seduction",  -- Succubus cast, detected via debuff
 }
 
 --[[===========================================================================
