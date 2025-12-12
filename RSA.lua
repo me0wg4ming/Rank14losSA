@@ -402,13 +402,73 @@ end
 
 local function IsEnemy(guid)
 	if not UnitExists(guid) then return false end
-	if not UnitIsPlayer(guid) then return false end
+	
+	-- Check 1: Must be a player (not NPC/mob)
+	if not UnitIsPlayer(guid) then
+		if RSA_SW.debugMode then
+			local name = UnitName(guid) or "Unknown"
+			DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[R14 DEBUG]|r IsEnemy rejected (not a player): " .. name)
+		end
+		return false
+	end
+	
+	-- Check 2: Players ALWAYS have a class - NPCs don't (or it's nil)
+	local class = UnitClass(guid)
+	if not class then
+		if RSA_SW.debugMode then
+			local name = UnitName(guid) or "Unknown"
+			DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[R14 DEBUG]|r IsEnemy rejected (no class): " .. name)
+		end
+		return false
+	end
+	
+	-- Check 3: Skip elite/boss/rare NPCs (they can sometimes pass UnitIsPlayer)
+	local classification = UnitClassification(guid)
+	if classification == "elite" or classification == "worldboss" or classification == "rare" or classification == "rareelite" then
+		if RSA_SW.debugMode then
+			local name = UnitName(guid) or "Unknown"
+			DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[R14 DEBUG]|r IsEnemy rejected (NPC classification: " .. classification .. "): " .. name)
+		end
+		return false
+	end
+	
+	-- Check 4: Must be attackable (enemy faction)
 	return UnitCanAttack("player", guid)
 end
 
 local function IsFriendly(guid)
 	if not UnitExists(guid) then return false end
-	if not UnitIsPlayer(guid) then return false end
+	
+	-- Check 1: Must be a player (not NPC/mob)
+	if not UnitIsPlayer(guid) then
+		if RSA_SW.debugMode then
+			local name = UnitName(guid) or "Unknown"
+			DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[R14 DEBUG]|r IsFriendly rejected (not a player): " .. name)
+		end
+		return false
+	end
+	
+	-- Check 2: Players ALWAYS have a class
+	local class = UnitClass(guid)
+	if not class then
+		if RSA_SW.debugMode then
+			local name = UnitName(guid) or "Unknown"
+			DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[R14 DEBUG]|r IsFriendly rejected (no class): " .. name)
+		end
+		return false
+	end
+	
+	-- Check 3: Skip elite/boss/rare NPCs
+	local classification = UnitClassification(guid)
+	if classification == "elite" or classification == "worldboss" or classification == "rare" or classification == "rareelite" then
+		if RSA_SW.debugMode then
+			local name = UnitName(guid) or "Unknown"
+			DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[R14 DEBUG]|r IsFriendly rejected (NPC classification): " .. name)
+		end
+		return false
+	end
+	
+	-- Check 4: Must NOT be attackable (friendly)
 	return not UnitCanAttack("player", guid)
 end
 
@@ -573,21 +633,54 @@ function RSA_SW:AddUnit(unit)
 	local exists, guid = UnitExists(unit)
 	if not exists or not guid then return end
 	
+	-- Check 1: Pet Filter (like Spy/ShaguScan)
+	-- Pet = NOT UnitIsPlayer AND UnitPlayerControlled
 	local isPlayer = UnitIsPlayer(guid)
 	local isControlled = UnitPlayerControlled(guid)
 	local isPet = not isPlayer and isControlled
 	
-	if isPet then return end
-	
-	if isPlayer then
-		local class = UnitClass(guid)
-		if not class then return end
-		
-		self.guids[guid] = GetTime()
-		
-		if IsEnemy(guid) then
-			self.enemyGuids[guid] = GetTime()
+	if isPet then
+		if self.debugMode then
+			local name = UnitName(guid) or "Unknown"
+			DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[R14 DEBUG]|r AddUnit skipped (pet): " .. name)
 		end
+		return
+	end
+	
+	-- Check 2: Must be a player
+	if not isPlayer then
+		if self.debugMode then
+			local name = UnitName(guid) or "Unknown"
+			DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[R14 DEBUG]|r AddUnit skipped (not a player): " .. name)
+		end
+		return
+	end
+	
+	-- Check 3: Players ALWAYS have a class - NPCs don't
+	local class = UnitClass(guid)
+	if not class then
+		if self.debugMode then
+			local name = UnitName(guid) or "Unknown"
+			DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[R14 DEBUG]|r AddUnit skipped (no class): " .. name)
+		end
+		return
+	end
+	
+	-- Check 4: Skip elite/boss/rare NPCs
+	local classification = UnitClassification(guid)
+	if classification == "elite" or classification == "worldboss" or classification == "rare" or classification == "rareelite" then
+		if self.debugMode then
+			local name = UnitName(guid) or "Unknown"
+			DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[R14 DEBUG]|r AddUnit skipped (NPC classification: " .. classification .. "): " .. name)
+		end
+		return
+	end
+	
+	-- Passed all checks - this is a real player
+	self.guids[guid] = GetTime()
+	
+	if IsEnemy(guid) then
+		self.enemyGuids[guid] = GetTime()
 	end
 end
 
@@ -817,6 +910,37 @@ function RSA_SW:OnUnitCastEvent(casterGUID, targetGUID, eventType, spellID, cast
 	-- Safety checks
 	if not spellID or not casterGUID then return end
 	if eventType ~= "START" and eventType ~= "CAST" then return end
+	
+	-- Check 1: Must be a player (not NPC/mob)
+	if not UnitIsPlayer(casterGUID) then
+		if self.debugMode then
+			local name = UnitName(casterGUID) or "Unknown"
+			DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[R14 DEBUG]|r UNIT_CASTEVENT skipped (not a player): " .. name .. " SpellID: " .. spellID)
+		end
+		return
+	end
+	
+	-- Check 2: Players ALWAYS have a class
+	local class = UnitClass(casterGUID)
+	if not class then
+		if self.debugMode then
+			local name = UnitName(casterGUID) or "Unknown"
+			DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[R14 DEBUG]|r UNIT_CASTEVENT skipped (no class): " .. name .. " SpellID: " .. spellID)
+		end
+		return
+	end
+	
+	-- Check 3: Skip elite/boss/rare NPCs
+	local classification = UnitClassification(casterGUID)
+	if classification == "elite" or classification == "worldboss" or classification == "rare" or classification == "rareelite" then
+		if self.debugMode then
+			local name = UnitName(casterGUID) or "Unknown"
+			DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[R14 DEBUG]|r UNIT_CASTEVENT skipped (NPC classification): " .. name .. " SpellID: " .. spellID)
+		end
+		return
+	end
+	
+	-- Check 4: Must be enemy
 	if not IsEnemy(casterGUID) then return end
 	
 	local casterName = UnitName(casterGUID) or "Unknown"
