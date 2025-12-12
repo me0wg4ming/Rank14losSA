@@ -1039,7 +1039,7 @@ function RSA_SW:Initialize()
 		print("|cff00ff00[RSA]|r SuperWoW detected - Enhanced mode active!")
 		return true
 	else
-		print("|cffffcc00[RSA]|r SuperWoW not detected - Using Combat Log fallback")
+		-- SuperWoW required - addon won't function without it
 		return false
 	end
 end
@@ -1059,20 +1059,11 @@ function RSA_SW:Disable()
 end
 
 --[[===========================================================================
-	Original RSA Functions (Combat Log Fallback)
+	Core RSA Functions
 =============================================================================]]
 
 local function print(msg)
 	DEFAULT_CHAT_FRAME:AddMessage(msg)
-end
-
-local function stringToTable(str)
-	str = string.sub(str, 1, string.len(str) - 1)
-	local args = {}
-	for word in string.gfind(str, "[^%s]+") do
-		tinsert(args, word)
-	end
-	return args
 end
 
 function RSA_SlashCmdHandler(msg)
@@ -1351,91 +1342,6 @@ end
 
 function RSA_Enable()
 	RSA_SW:Enable()
-	
-	if not RSA_SW.enabled then
-		RSAMenuFrame:RegisterEvent("CHAT_MSG_SPELL_HOSTILEPLAYER_BUFF")
-		RSAMenuFrame:RegisterEvent("CHAT_MSG_SPELL_HOSTILEPLAYER_DAMAGE")
-		RSAMenuFrame:RegisterEvent("CHAT_MSG_SPELL_PERIODIC_SELF_DAMAGE")
-		RSAMenuFrame:RegisterEvent("CHAT_MSG_SPELL_PERIODIC_FRIENDLYPLAYER_DAMAGE")
-		RSAMenuFrame:RegisterEvent("CHAT_MSG_SPELL_PERIODIC_HOSTILEPLAYER_BUFFS")
-		RSAMenuFrame:RegisterEvent("CHAT_MSG_SPELL_AURA_GONE_OTHER")
-	end
-end
-
-function RSA_FilterAttacks(msg)
-	if not RSAConfig.use or not RSAConfig.use.enabled then return end
-	local t = stringToTable(msg)
-	local spell = t[2]
-	local i = 3
-	while i < tgetn(t) - 3 do
-		spell = spell..t[i]
-		i = i + 1
-	end
-	if RSAConfig.use[spell] then
-		RSA_PlaySoundFile(spell)
-	end
-end
-
-function RSA_FilterBuffs(msg)
-	if not RSAConfig.buffs.enabled then return end
-	local t = stringToTable(msg)
-	local spell = t[3]
-	local i = 4
-	while t[i] do
-		spell = spell..t[i]
-		i = i + 1
-	end
-	if RSAConfig.buffs[spell] then
-		RSA_PlaySoundFile(spell)
-	elseif RSAConfig.buffs.Trinket and strfind(spell, "Immune") then
-		RSA_PlaySoundFile("Trinket")
-	elseif RSAConfig.buffs.Reflector and strfind(spell, "Reflector") then
-		RSA_PlaySoundFile("Reflector")
-	end
-end
-
-function RSA_FilterCasts(msg)
-	if not RSAConfig.casts.enabled then return end
-	local t = stringToTable(msg)
-	local spell = t[5]
-	local i = 6
-	while t[i] do
-		spell = spell..t[i]
-		i = i + 1
-	end
-	if RSAConfig.casts[spell] then
-		RSA_PlaySoundFile(spell)
-	elseif RSAConfig.casts.Polymorph and strfind(spell, "Polymorph") then
-		RSA_PlaySoundFile("Polymorph")
-	end
-end
-
-function RSA_FilterDebuffs(msg)
-	if not RSAConfig.debuffs.enabled then return end
-	local t = stringToTable(msg)
-	local spell = t[5]
-	local i = 6
-	while t[i] do
-		spell = spell..t[i]
-		i = i + 1
-	end
-	if RSAConfig.debuffs[spell] then
-		RSA_PlaySoundFile(spell)
-	end
-end
-
-function RSA_FilterFadingBuffs(msg)
-	if not RSAConfig.fadingBuffs.enabled then return end
-	local t = stringToTable(msg)
-	local spell = t[1]
-	local i = 2
-	while i < tgetn(t) - 2 do
-		spell = spell..t[i]
-		i = i + 1
-	end
-	if RSAConfig.fadingBuffs[spell] then
-		RSA_PlaySoundFile(spell.."down")
-	end
 end
 
 --[[===========================================================================
