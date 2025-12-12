@@ -151,6 +151,7 @@ local RSA_SOUND_OPTION_TEXT = {
 local RSA_SW = {
 	enabled = false,
 	debugMode = false,
+	inInstance = false,  -- Disabled in raid/party instances
 	guids = {},
 	enemyGuids = {},
 	trackedBuffs = {},
@@ -612,6 +613,42 @@ function RSA_SW:CleanupMemory()
 end
 
 --[[===========================================================================
+	Instance Check (disable in PvE instances)
+=============================================================================]]
+
+function RSA_SW:UpdateInstanceStatus()
+	local inInstance, instanceType = IsInInstance()
+	local zone = GetZoneText()
+	
+	-- Exception: Winter Veil Vale is marked as "party" instance but should allow RSA (like Spy)
+	local isWinterVeilVale = (zone == "Winter Veil Vale")
+	
+	if inInstance and not isWinterVeilVale and (instanceType == "party" or instanceType == "raid") then
+		-- In PvE dungeon or raid - disable
+		if not self.inInstance then
+			self.inInstance = true
+			-- Clear all tracking data when entering instance
+			self.fadeWatchList = {}
+			self.enemyGuids = {}
+			self.guids = {}
+			self.trackedBuffs = {}
+			self.trackedDebuffs = {}
+			if self.debugMode then
+				DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[R14 DEBUG]|r Entered PvE instance - RSA disabled")
+			end
+		end
+	else
+		-- Not in PvE instance (world, BG, arena, Winter Veil Vale) - enable
+		if self.inInstance then
+			self.inInstance = false
+			if self.debugMode then
+				DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00[R14 DEBUG]|r Left PvE instance - RSA enabled")
+			end
+		end
+	end
+end
+
+--[[===========================================================================
 	GUID Collection
 =============================================================================]]
 
@@ -731,6 +768,9 @@ scanFrame:SetScript("OnUpdate", function()
 	if not RSA_SW.enabled then return end
 	if not RSAConfig or not RSAConfig.enabled then return end
 	
+	-- Skip if in PvE instance
+	if RSA_SW.inInstance then return end
+	
 	scanTimer = scanTimer + arg1
 	if scanTimer < RSA_SW.SCAN_INTERVAL then return end
 	scanTimer = 0
@@ -806,6 +846,7 @@ guidFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 guidFrame:RegisterEvent("UNIT_AURA")
 guidFrame:RegisterEvent("UNIT_HEALTH")
 guidFrame:RegisterEvent("UNIT_CASTEVENT")
+guidFrame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 
 guidFrame:SetScript("OnEvent", function()
 	if not RSA_SW.enabled then return end
@@ -816,9 +857,12 @@ guidFrame:SetScript("OnEvent", function()
 		RSA_SW:AddUnit("target")
 		RSA_SW:AddUnit("targettarget")
 	elseif event == "PLAYER_ENTERING_WORLD" then
+		RSA_SW:UpdateInstanceStatus()
 		RSA_SW:AddUnit("player")
 		RSA_SW:AddUnit("target")
 		RSA_SW:AddUnit("targettarget")
+	elseif event == "ZONE_CHANGED_NEW_AREA" then
+		RSA_SW:UpdateInstanceStatus()
 	elseif event == "UNIT_CASTEVENT" then
 		RSA_SW:OnUnitCastEvent(arg1, arg2, arg3, arg4, arg5)
 	else
@@ -837,6 +881,9 @@ function RSA_SW:OnUnitCastEvent(casterGUID, targetGUID, eventType, spellID, cast
 	-- Safety checks
 	if not spellID or not casterGUID then return end
 	if eventType ~= "START" and eventType ~= "CAST" then return end
+	
+	-- Skip if in PvE instance
+	if self.inInstance then return end
 	
 	-- Check 1: Must be a player (not NPC/mob)
 	if not UnitIsPlayer(casterGUID) then
