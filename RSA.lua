@@ -869,7 +869,7 @@ function RSA_SW:OnUnitCastEvent(casterGUID, targetGUID, eventType, spellID, cast
 			if self.debugMode then
 				DEFAULT_CHAT_FRAME:AddMessage("|cffff00ff[R14 DEBUG]|r Playing sound: " .. useConfigKey .. ".mp3")
 			end
-			RSA_PlaySoundFile(useConfigKey, casterName, casterGUID)
+			RSA_PlaySoundFile(useConfigKey, casterName, casterGUID, nil, spellID)
 		elseif self.debugMode then
 			DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[R14 DEBUG]|r Sound disabled in config for: " .. useConfigKey)
 		end
@@ -894,7 +894,7 @@ function RSA_SW:OnUnitCastEvent(casterGUID, targetGUID, eventType, spellID, cast
 			if self.debugMode then
 				DEFAULT_CHAT_FRAME:AddMessage("|cffff00ff[R14 DEBUG]|r Playing sound: " .. castConfigKey .. ".mp3")
 			end
-			RSA_PlaySoundFile(castConfigKey, casterName, casterGUID, castDuration)
+			RSA_PlaySoundFile(castConfigKey, casterName, casterGUID, castDuration, spellID)
 		elseif self.debugMode then
 			DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[R14 DEBUG]|r Sound disabled in config for: " .. castConfigKey)
 		end
@@ -913,7 +913,7 @@ function RSA_SW:OnUnitCastEvent(casterGUID, targetGUID, eventType, spellID, cast
 			if self.debugMode then
 				DEFAULT_CHAT_FRAME:AddMessage("|cffff00ff[R14 DEBUG]|r Playing sound: " .. buffConfigKey .. ".mp3")
 			end
-			RSA_PlaySoundFile(buffConfigKey, casterName, casterGUID)
+			RSA_PlaySoundFile(buffConfigKey, casterName, casterGUID, nil, spellID)
 		elseif self.debugMode then
 			DEFAULT_CHAT_FRAME:AddMessage("|cffffcc00[R14 DEBUG]|r Sound disabled in config for: " .. buffConfigKey)
 		end
@@ -1388,94 +1388,15 @@ function RSA_CreateAlertFrame()
 	end
 end
 
--- Spell Icon Paths (ConfigKey -> Icon)
-local RSA_SPELL_ICONS = {
-	-- Buffs
-	["AdrenalineRush"] = "Interface\\Icons\\Spell_Shadow_ShadowWordDominate",
-	["ArcanePower"] = "Interface\\Icons\\Spell_Nature_Lightning",
-	["Barkskin"] = "Interface\\Icons\\Spell_Nature_StoneClawTotem",
-	["BattleStance"] = "Interface\\Icons\\Ability_Warrior_OffensiveStance",
-	["BerserkerRage"] = "Interface\\Icons\\Spell_Nature_AncestralGuardian",
-	["BerserkerStance"] = "Interface\\Icons\\Ability_Racial_Avatar",
-	["BestialWrath"] = "Interface\\Icons\\Ability_Druid_FerociousBite",
-	["BladeFlurry"] = "Interface\\Icons\\Ability_Warrior_Punishingblow",
-	["BlessingofFreedom"] = "Interface\\Icons\\Spell_Holy_SealOfValor",
-	["BlessingofProtection"] = "Interface\\Icons\\Spell_Holy_SealOfProtection",
-	["Cannibalize"] = "Interface\\Icons\\Ability_Racial_Cannibalize",
-	["ColdBlood"] = "Interface\\Icons\\Spell_Ice_Lament",
-	["Combustion"] = "Interface\\Icons\\Spell_Fire_SealOfFire",
-	["Dash"] = "Interface\\Icons\\Ability_Druid_Dash",
-	["DeathWish"] = "Interface\\Icons\\Spell_Shadow_DeathPact",
-	["DefensiveStance"] = "Interface\\Icons\\Ability_Warrior_DefensiveStance",
-	["DesperatePrayer"] = "Interface\\Icons\\Spell_Holy_Restoration",
-	["Deterrence"] = "Interface\\Icons\\Ability_Whirlwind",
-	["DivineFavor"] = "Interface\\Icons\\Spell_Holy_Heal",
-	["DivineShield"] = "Interface\\Icons\\Spell_Holy_DivineIntervention",
-	["EarthbindTotem"] = "Interface\\Icons\\Spell_Nature_StrengthOfEarthTotem02",
-	["ElementalMastery"] = "Interface\\Icons\\Spell_Nature_WispHeal",
-	["Evasion"] = "Interface\\Icons\\Spell_Shadow_ShadowWard",
-	["Evocation"] = "Interface\\Icons\\Spell_Nature_Purge",
-	["FearWard"] = "Interface\\Icons\\Spell_Holy_Excorcism",
-	["FirstAid"] = "Interface\\Icons\\Spell_Holy_Heal",
-	["FrenziedRegeneration"] = "Interface\\Icons\\Ability_BullRush",
-	["FreezingTrap"] = "Interface\\Icons\\Spell_Frost_ChainsOfIce",
-	["GroundingTotem"] = "Interface\\Icons\\Spell_Nature_GroundingTotem",
-	["IceBlock"] = "Interface\\Icons\\Spell_Frost_Frost",
-	["InnerFocus"] = "Interface\\Icons\\Spell_Frost_WindWalkOn",
-	["Innervate"] = "Interface\\Icons\\Spell_Nature_Lightning",
-	["Intimidation"] = "Interface\\Icons\\Ability_Devour",
-	["LastStand"] = "Interface\\Icons\\Spell_Holy_AshesToAshes",
-	["ManaTideTotem"] = "Interface\\Icons\\Spell_Frost_SummonWaterElemental",
-	["Nature'sGrasp"] = "Interface\\Icons\\Spell_Nature_NaturesWrath",
-	["Nature'sSwiftness"] = "Interface\\Icons\\Spell_Nature_RavenForm",
-	["PowerInfusion"] = "Interface\\Icons\\Spell_Holy_PowerInfusion",
-	["PresenceofMind"] = "Interface\\Icons\\Spell_Nature_EnchantArmor",
-	["RapidFire"] = "Interface\\Icons\\Ability_Hunter_RunningShot",
-	["Recklessness"] = "Interface\\Icons\\Ability_CriticalStrike",
-	["Reflector"] = "Interface\\Icons\\Spell_Frost_FrostWard",
-	["Retaliation"] = "Interface\\Icons\\Ability_Warrior_Challange",
-	["Sacrifice"] = "Interface\\Icons\\Spell_Shadow_SacrificialShield",
-	["ShieldWall"] = "Interface\\Icons\\Ability_Warrior_ShieldWall",
-	["Sprint"] = "Interface\\Icons\\Ability_Rogue_Sprint",
-	["Stoneform"] = "Interface\\Icons\\Spell_Shadow_UnholyStrength",
-	["SweepingStrikes"] = "Interface\\Icons\\Ability_Rogue_SliceDice",
-	["Tranquility"] = "Interface\\Icons\\Spell_Nature_Tranquility",
-	["TremorTotem"] = "Interface\\Icons\\Spell_Nature_TremorTotem",
-	["Trinket"] = "Interface\\Icons\\INV_Jewelry_TrinketPVP_02",
-	["WilloftheForsaken"] = "Interface\\Icons\\Spell_Shadow_RaiseDead",
-	-- Casts
-	["EntanglingRoots"] = "Interface\\Icons\\Spell_Nature_StrangleVines",
-	["EscapeArtist"] = "Interface\\Icons\\Ability_Rogue_Trip",
-	["Fear"] = "Interface\\Icons\\Spell_Shadow_Possession",
-	["Hearthstone"] = "Interface\\Icons\\INV_Misc_Rune_01",
-	["Hibernate"] = "Interface\\Icons\\Spell_Nature_Sleep",
-	["HowlofTerror"] = "Interface\\Icons\\Spell_Shadow_DeathScream",
-	["MindControl"] = "Interface\\Icons\\Spell_Shadow_ShadowWordDominate",
-	["Polymorph"] = "Interface\\Icons\\Spell_Nature_Polymorph",
-	["RevivePet"] = "Interface\\Icons\\Ability_Hunter_BeastSoothe",
-	["ScareBeast"] = "Interface\\Icons\\Ability_Druid_Cower",
-	["WarStomp"] = "Interface\\Icons\\Ability_WarStomp",
-	-- Debuffs
-	["Blind"] = "Interface\\Icons\\Spell_Shadow_MindSteal",
-	["ConcussionBlow"] = "Interface\\Icons\\Ability_ThunderBolt",
-	["Counterspell-Silenced"] = "Interface\\Icons\\Spell_Frost_IceShock",
-	["DeathCoil"] = "Interface\\Icons\\Spell_Shadow_DeathCoil",
-	["Disarm"] = "Interface\\Icons\\Ability_Warrior_Disarm",
-	["HammerofJustice"] = "Interface\\Icons\\Spell_Holy_SealOfMight",
-	["IntimidatingShout"] = "Interface\\Icons\\Ability_GolemThunderClap",
-	["PsychicScream"] = "Interface\\Icons\\Spell_Shadow_PsychicScream",
-	["Repetance"] = "Interface\\Icons\\Spell_Holy_PrayerOfHealing",
-	["ScatterShot"] = "Interface\\Icons\\Ability_GolemStormBolt",
-	["Seduction"] = "Interface\\Icons\\Spell_Shadow_MindSteal",
-	["Silence"] = "Interface\\Icons\\Spell_Shadow_ImpPhaseShift",
-	["SpellLock"] = "Interface\\Icons\\Spell_Shadow_MindRot",
-	["WyvernSting"] = "Interface\\Icons\\INV_Spear_02",
-	-- Use
-	["Kick"] = "Interface\\Icons\\Ability_Kick",
-	["FlashBomb"] = "Interface\\Icons\\INV_Misc_Bomb_08",
+-- Icons are now fetched dynamically via SpellInfo(spellID)
+-- Exception: Items return "Interface\Icons\Temp" - need manual mapping
+local RSA_ITEM_ICONS = {
+	[5134] = "Interface\\Icons\\INV_Misc_Ammo_Bullet_01",       -- Flash Bomb
+	[23505] = "Interface\\Icons\\INV_Jewelry_TrinketPVP_02",   -- PvP Trinket
+	[52317] = "Interface\\Icons\\INV_Jewelry_TrinketPVP_02",   -- PvP Trinket (Turtle WoW)
 }
 
-function RSA_ShowAlert(spellName, playerName, casterGUID, castDuration)
+function RSA_ShowAlert(spellName, playerName, casterGUID, castDuration, spellID)
 	if not RSA_AlertFrame then return end
 	if not RSA_AlertFrameEnabled then return end
 	if RSA_MoveMode then return end
@@ -1516,8 +1437,20 @@ function RSA_ShowAlert(spellName, playerName, casterGUID, castDuration)
 		isFade = true
 	end
 	
-	-- Set spell icon
-	local iconPath = RSA_SPELL_ICONS[displayName] or "Interface\\Icons\\INV_Misc_QuestionMark"
+	-- Set spell icon - check item override table first, then SpellInfo
+	local iconPath = "Interface\\Icons\\INV_Misc_QuestionMark"
+	if spellID then
+		local spellIDNum = tonumber(spellID)
+		if spellIDNum and RSA_ITEM_ICONS[spellIDNum] then
+			-- Item spells - use manual mapping
+			iconPath = RSA_ITEM_ICONS[spellIDNum]
+		elseif SpellInfo then
+			local _, _, icon = SpellInfo(spellID)
+			if icon then
+				iconPath = icon
+			end
+		end
+	end
 	RSA_AlertFrame.icon:SetTexture(iconPath)
 	
 	-- Build alert text
@@ -1655,9 +1588,9 @@ function RSA_ToggleMoveMode()
 	end
 end
 
-function RSA_PlaySoundFile(spell, playerName, casterGUID, castDuration)
-	-- Show visual alert with player name, GUID for target priority, and cast duration
-	RSA_ShowAlert(spell, playerName, casterGUID, castDuration)
+function RSA_PlaySoundFile(spell, playerName, casterGUID, castDuration, spellID)
+	-- Show visual alert with player name, GUID for target priority, cast duration, and spellID for icon
+	RSA_ShowAlert(spell, playerName, casterGUID, castDuration, spellID)
 	
 	local mp3Path = "Interface\\AddOns\\Rank14losSA\\Voice\\"..spell..".mp3"
 	local success = PlaySoundFile(mp3Path, "Master")
