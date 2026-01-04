@@ -9,7 +9,7 @@ A complete rewrite of the classic Rank14losSA addon for WoW 1.12.1 with **SuperW
 <img width="719" height="284" alt="grafik" src="https://github.com/user-attachments/assets/ce1cb387-21e5-46ad-b825-2142996a36f8" />
 
 - Pfui support
-- Shows buff-fade timer on nameplate now.
+- Shows buff-fade timer on target frame now.
 - always tracks cooldowns-fadeing of all enemy players in a 50yards radius.
 
 ## 🎯 What's New in Reborn
