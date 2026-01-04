@@ -2,6 +2,9 @@
 
 A complete rewrite of the classic Rank14losSA addon for WoW 1.12.1 with **SuperWoW** integration. This addon verbally warns you when enemies use important spells (Blind, Shield Wall, Trinket, etc.) - now with proactive GUID-based detection instead of reactive combat log parsing.
 
+<img width="719" height="284" alt="grafik" src="https://github.com/user-attachments/assets/eb79a48f-1ca6-42ea-bb8a-258204d1f1cf" />
+
+
 ## 🎯 What's New in Reborn
 
 ### SuperWoW Integration (Required)
