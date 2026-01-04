@@ -11,8 +11,6 @@ A complete rewrite of the classic Rank14losSA addon for WoW 1.12.1 with **SuperW
 - Shows buff-fade timer on nameplate now.
 - always tracks cooldowns-fadeing of all enemy players in a 50yards radius.
 
-A complete rewrite of the classic Rank14losSA addon for WoW 1.12.1 with SuperWoW integration. This addon verbally warns you when enemies use important spells (Blind, Shield Wall, Trinket, etc.) - now with proactive GUID-based detection instead of reactive combat log parsing.
-
 ## 🎯 What's New in Reborn
 
 ### SuperWoW Integration (Required)
