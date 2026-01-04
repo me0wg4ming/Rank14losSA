@@ -2,6 +2,17 @@
 
 A complete rewrite of the classic Rank14losSA addon for WoW 1.12.1 with **SuperWoW** integration. This addon verbally warns you when enemies use important spells (Blind, Shield Wall, Trinket, etc.) - now with proactive GUID-based detection instead of reactive combat log parsing.
 
+📜 Changelog
+v2.0 - Reborn (splitup of files)
+
+<img width="719" height="284" alt="grafik" src="https://github.com/user-attachments/assets/ce1cb387-21e5-46ad-b825-2142996a36f8" />
+
+- Pfui support
+- Shows buff-fade timer on nameplate now.
+- always tracks cooldowns-fadeing of all enemy players in a 50yards radius.
+
+A complete rewrite of the classic Rank14losSA addon for WoW 1.12.1 with SuperWoW integration. This addon verbally warns you when enemies use important spells (Blind, Shield Wall, Trinket, etc.) - now with proactive GUID-based detection instead of reactive combat log parsing.
+
 ## 🎯 What's New in Reborn
 
 ### SuperWoW Integration (Required)
