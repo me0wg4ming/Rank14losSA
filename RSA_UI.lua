@@ -201,13 +201,13 @@ function RSA_ShowAlert(spellName, playerName, casterGUID, castDuration, spellID)
 	local buffDuration = nil
 	local hideTimer = false
 	
-	-- "Use" abilities (Kick, FlashBomb, etc.) get 5s display without timer
+	-- "Use" abilities (Kick, FlashBomb, etc.) get 3s display without timer
 	if spellID and RSA_USE_SPELL_IDS[spellID] then
-		buffDuration = 5
+		buffDuration = 3
 		hideTimer = true
-	-- Buffs without known duration get 5s display without timer
+	-- Buffs without known duration get 3s display without timer
 	elseif RSA_NO_TIMER_BUFFS and RSA_NO_TIMER_BUFFS[displayName] then
-		buffDuration = 5
+		buffDuration = 3
 		hideTimer = true
 	elseif spellID and RSA_SPELLID_DURATIONS[spellID] then
 		buffDuration = RSA_SPELLID_DURATIONS[spellID]
@@ -215,20 +215,24 @@ function RSA_ShowAlert(spellName, playerName, casterGUID, castDuration, spellID)
 		buffDuration = RSA_BUFF_DURATIONS[displayName]
 	end
 	
-	-- Track buff with duration
-	if buffDuration then
-		RSA_AlertFrame.activeBuffs[buffKey] = {
-			spellName = spellName,
-			displayName = displayName,
-			playerName = playerName,
-			casterGUID = casterGUID,
-			spellID = spellID,
-			duration = buffDuration,
-			endTime = GetTime() + buffDuration,
-			isTarget = isTarget,
-			hideTimer = hideTimer,
-		}
+	-- For abilities without duration, use 3s default to ensure cleanup
+	if not buffDuration then
+		buffDuration = 3
+		hideTimer = true
 	end
+	
+	-- Always track buffs with duration (now all have one)
+	RSA_AlertFrame.activeBuffs[buffKey] = {
+		spellName = spellName,
+		displayName = displayName,
+		playerName = playerName,
+		casterGUID = casterGUID,
+		spellID = spellID,
+		duration = buffDuration,
+		endTime = GetTime() + buffDuration,
+		isTarget = isTarget,
+		hideTimer = hideTimer,
+	}
 	
 	-- Show the buff with shortest remaining time
 	RSA_ShowNextBuff()
@@ -267,8 +271,12 @@ function RSA_ShowNextBuff()
 		RSA_DisplayBuffAlert(bestBuff, remaining)
 		RSA_AlertFrame.currentBuffKey = bestKey
 	else
-		-- No active buffs - hide or let current alert fade
+		-- No active buffs - hide immediately
 		RSA_AlertFrame.currentBuffKey = nil
+		RSA_AlertFrame.isBuffTimer = false
+		RSA_AlertFrame:Hide()
+		RSA_AlertFrame.bar:SetWidth(0)
+		RSA_AlertFrame.timerText:SetText("")
 	end
 end
 
@@ -395,7 +403,7 @@ function RSA_DisplayAlert(spellName, playerName, casterGUID, castDuration, spell
 		RSA_AlertFrame.bar:Show()
 		RSA_AlertFrame.timerText:SetText("")
 	else
-		-- INSTANT or FADE: Full bar, normal fade after 2s
+		-- INSTANT or FADE: Full bar
 		RSA_AlertFrame.castTime = 0
 		RSA_AlertFrame.castElapsed = 0
 		RSA_AlertFrame.isCasting = false
@@ -404,16 +412,16 @@ function RSA_DisplayAlert(spellName, playerName, casterGUID, castDuration, spell
 		RSA_AlertFrame.bar:SetWidth(RSA_AlertFrame:GetWidth())
 		RSA_AlertFrame.bar:SetAlpha(1)
 		if isFade then
+			-- Fade alerts: green bar, no fade time - disappear immediately
 			RSA_AlertFrame.bar:SetVertexColor(0.3, 0.8, 0.3, sliderAlpha)
+			RSA_AlertFrame.fadeTime = 2.5  -- Start fade immediately (2.5 = instant fade)
 		else
+			-- Instant casts: normal 2s display then fade
 			RSA_AlertFrame.bar:SetVertexColor(1.0, 0.7, 0.0, sliderAlpha)
+			RSA_AlertFrame.fadeTime = 0
 		end
 		RSA_AlertFrame.bar:Show()
 	end
-	
-	RSA_AlertFrame:SetAlpha(1)
-	RSA_AlertFrame:Show()
-	RSA_AlertFrame.fadeTime = 0
 	RSA_AlertFrame.isTargetAlert = isTarget
 end
 
@@ -542,13 +550,13 @@ function RSA_UpdatePortraitIcon(spell, playerName, casterGUID, spellID)
 		local duration = nil
 		local hideTimer = false
 		
-		-- "Use" abilities (Kick, FlashBomb, etc.) get 5s display without timer
+		-- "Use" abilities (Kick, FlashBomb, etc.) get 3s display without timer
 		if spellID and RSA_USE_SPELL_IDS[spellID] then
-			duration = 5
+			duration = 3
 			hideTimer = true
-		-- Buffs without known duration get 5s display without timer
+		-- Buffs without known duration get 3s display without timer
 		elseif RSA_NO_TIMER_BUFFS and RSA_NO_TIMER_BUFFS[displayName] then
-			duration = 5
+			duration = 3
 			hideTimer = true
 		elseif spellID and RSA_SPELLID_DURATIONS[spellID] then
 			duration = RSA_SPELLID_DURATIONS[spellID]
@@ -556,9 +564,10 @@ function RSA_UpdatePortraitIcon(spell, playerName, casterGUID, spellID)
 			duration = RSA_BUFF_DURATIONS[displayName]
 		end
 		
-		-- Skip abilities without duration (would stay forever)
+		-- For abilities without duration, use 3s default to ensure cleanup
 		if not duration then
-			return
+			duration = 3
+			hideTimer = true
 		end
 		
 		local endTime = GetTime() + duration
@@ -617,11 +626,19 @@ function RSA_RefreshTargetPortrait()
 	end
 end
 
--- Target change hook
+-- Target change hook and periodic cleanup
 local RSA_TargetChangeFrame = CreateFrame("Frame")
 RSA_TargetChangeFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
+local cleanupTimer = 0
 RSA_TargetChangeFrame:SetScript("OnEvent", function()
 	RSA_RefreshTargetPortrait()
+end)
+RSA_TargetChangeFrame:SetScript("OnUpdate", function()
+	cleanupTimer = cleanupTimer + arg1
+	if cleanupTimer >= 0.1 then
+		cleanupTimer = 0
+		RSA_RefreshTargetPortrait()
+	end
 end)
 
 --[[===========================================================================
@@ -674,8 +691,10 @@ function RSA_CreatePlayerFrameIcon()
 			if remaining > 0 then
 				this.timer:SetText(string.format("%.1f", remaining))
 			else
+				-- Time expired - hide immediately
 				this:Hide()
 				this.timer:SetText("")
+				this.spellName = nil
 			end
 		end
 	end)
