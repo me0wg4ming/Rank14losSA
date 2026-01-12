@@ -1,7 +1,7 @@
 ## Interface: 11200
 ## Title: |CFF00FF00Rank14losSA |CFFFF0000[SuperWoW]
 ## Notes: Backport of GladiatorlosSA
-## Version: 2.0.0
+## Version: 2.1.0
 ## Author: Meow [me0wg4ming]
 ## SavedVariables: RSAConfig, RSA_AlertFrameX, RSA_AlertFrameY, RSA_AlertFrameEnabled, RSA_AlertFrameBgAlpha
 
