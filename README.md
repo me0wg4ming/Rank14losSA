@@ -10,7 +10,7 @@ A complete rewrite of the classic Rank14losSA addon for WoW 1.12.1 with **SuperW
 - Resized the alert frame to be a bit smaller
 - moved bar right of icon (it was behind the icon before so cast bar not been fully shown)
 
-![alt text](image.png)
+![alt text](image.jpg)
 
 ## 📜 Changelog
 
