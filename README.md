@@ -9,6 +9,8 @@ A complete rewrite of the classic Rank14losSA addon for WoW 1.12.1 with **SuperW
 - Added Free Action potion to list
 - Resized the alert frame to be a bit smaller
 
+![alt text](image.png)
+
 ## 📜 Changelog
 
 ### v2.0 - Reborn (splitup of files)
