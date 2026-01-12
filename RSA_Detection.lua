@@ -346,7 +346,22 @@ function RSA_SW:OnUnitCastEvent(casterGUID, targetGUID, eventType, spellID, cast
 				RSA_AlertFrame.isCasting = false
 				RSA_AlertFrame.bar:SetWidth(0)
 				RSA_AlertFrame.timerText:SetText("")
-				RSA_AlertFrame:Hide()
+				
+				-- Check if we have active buffs to show instead of hiding
+				if RSA_AlertFrame.activeBuffs and next(RSA_AlertFrame.activeBuffs) ~= nil then
+					RSA_ShowNextBuff()
+				elseif RSA_MoveMode then
+					-- Im Move-Mode: Zurück zum Platzhalter
+					RSA_AlertFrame.text:SetText(">> DRAG TO MOVE <<")
+					RSA_AlertFrame.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+					local textWidth = RSA_AlertFrame.text:GetStringWidth()
+					local frameWidth = math.max(180, textWidth + 80)
+					RSA_AlertFrame:SetWidth(frameWidth)
+					RSA_AlertFrame.bar:SetWidth(frameWidth)
+					RSA_AlertFrame.bar:SetVertexColor(0.5, 0.5, 0.5, RSA_AlertFrameBgAlpha or 0.7)
+				else
+					RSA_AlertFrame:Hide()
+				end
 			end
 		end
 		return
@@ -384,8 +399,11 @@ function RSA_SW:OnUnitCastEvent(casterGUID, targetGUID, eventType, spellID, cast
 		local _, playerGuid = UnitExists("player")
 		if targetGUID ~= playerGuid then return end
 		
-		if RSAConfig.casts.enabled and RSAConfig.casts[castConfigKey] and CanAlert(casterGUID, castConfigKey, "cast") then
-			RSA_PlaySoundFile(castConfigKey, casterName, casterGUID, castDuration, spellID)
+		if RSAConfig.casts.enabled and RSAConfig.casts[castConfigKey] then
+			-- Für Casts: Immer anzeigen wenn in Range, kein Cooldown-Check
+			if not distanceCheckAvailable or IsWithinRange(casterGUID, 50) then
+				RSA_PlaySoundFile(castConfigKey, casterName, casterGUID, castDuration, spellID)
+			end
 		end
 		return
 	end

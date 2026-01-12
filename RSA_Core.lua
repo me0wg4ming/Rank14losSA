@@ -76,7 +76,7 @@ function RSA_OnEvent(event)
 					["Retaliation"] = true, ["Sacrifice"] = true, ["ShieldWall"] = true,
 					["Sprint"] = true, ["Stoneform"] = true, ["SweepingStrikes"] = true,
 					["Tranquility"] = true, ["TremorTotem"] = true, ["Trinket"] = true,
-					["WilloftheForsaken"] = true,
+					["WilloftheForsaken"] = true, ["FreeAction"] = true,
 				},
 				["casts"] = {
 					["enabled"] = true,
@@ -103,13 +103,25 @@ function RSA_OnEvent(event)
 					["IceBlock"] = true, ["Innervate"] = true, ["LastStand"] = true,
 					["Nature'sGrasp"] = true, ["RapidFire"] = true, ["Recklessness"] = true,
 					["Retaliation"] = true, ["ShieldWall"] = true, ["Sprint"] = true,
-					["Stoneform"] = true, ["WilloftheForsaken"] = true,
+					["Stoneform"] = true, ["WilloftheForsaken"] = true, ["FreeAction"] = true,
 				},
 				["use"] = {
 					["enabled"] = true,
 					["Kick"] = true, ["FlashBomb"] = true,
 				},
 			}
+		end
+		
+		-- Migrate existing configs: add new buff entries
+		if RSAConfig.buffs then
+			local newBuffs = {
+				"FreeAction",
+			}
+			for _, buff in ipairs(newBuffs) do
+				if RSAConfig.buffs[buff] == nil then
+					RSAConfig.buffs[buff] = true
+				end
+			end
 		end
 		
 		-- Migrate existing configs: add new fadingBuffs entries
@@ -119,7 +131,7 @@ function RSA_OnEvent(event)
 				"BladeFlurry", "BlessingofFreedom", "Combustion", "Dash", "DeathWish",
 				"FrenziedRegeneration", "Innervate", "LastStand", "Nature'sGrasp",
 				"RapidFire", "Recklessness", "Retaliation", "Sprint", "Stoneform",
-				"WilloftheForsaken",
+				"WilloftheForsaken", "FreeAction",
 			}
 			for _, buff in ipairs(newFadingBuffs) do
 				if RSAConfig.fadingBuffs[buff] == nil then
@@ -173,6 +185,61 @@ end
 function RSA_PlaySoundFile(spell, playerName, casterGUID, castDuration, spellID)
 	RSA_ShowAlert(spell, playerName, casterGUID, castDuration, spellID)
 	RSA_UpdatePortraitIcon(spell, playerName, casterGUID, spellID)
+	
+	-- DEBUG OUTPUT
+	if RSA_SW and RSA_SW.debugMode then
+		local isFade = string.sub(spell, -4) == "down"
+		local displayName = isFade and string.sub(spell, 1, -5) or spell
+		local eventType = "BUFF"
+		
+		if castDuration and tonumber(castDuration) and tonumber(castDuration) > 0 then
+			eventType = "CAST"
+		elseif isFade then
+			eventType = "FADE"
+		elseif spellID and RSA_USE_SPELL_IDS[spellID] then
+			eventType = "USE"
+		end
+		
+		-- Get spell name with rank from SpellInfo
+		local spellNameWithRank = displayName
+		if spellID and SpellInfo then
+			local name, rank = SpellInfo(spellID)
+			if name then
+				spellNameWithRank = name
+				if rank and rank ~= "" then
+					spellNameWithRank = spellNameWithRank .. "(" .. rank .. ")"
+				end
+			end
+		end
+		
+		DEFAULT_CHAT_FRAME:AddMessage("|cffff00ff========== R14 Debug ==========|r")
+		DEFAULT_CHAT_FRAME:AddMessage("|cffff00ffEvent Type:|r " .. eventType)
+		DEFAULT_CHAT_FRAME:AddMessage("|cffff00ffCaster:|r " .. (playerName or "Unknown"))
+		DEFAULT_CHAT_FRAME:AddMessage("|cffff00ffSpell:|r " .. spellNameWithRank)
+		
+		-- Spell ID nur anzeigen wenn nicht Fade
+		if not isFade then
+			DEFAULT_CHAT_FRAME:AddMessage("|cffff00ffSpell ID:|r " .. tostring(spellID or "N/A"))
+		end
+		
+		if castDuration and tonumber(castDuration) and tonumber(castDuration) > 0 then
+			DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff00ffCast Time:|r %.2fs", tonumber(castDuration) / 1000))
+		elseif not isFade then
+			-- Zeige Duration für Buffs
+			local duration = nil
+			if spellID and RSA_SPELLID_DURATIONS[spellID] then
+				duration = RSA_SPELLID_DURATIONS[spellID]
+			elseif RSA_BUFF_DURATIONS[displayName] then
+				duration = RSA_BUFF_DURATIONS[displayName]
+			end
+			if duration then
+				DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffff00ffDuration:|r %ds", duration))
+			end
+		end
+		
+		DEFAULT_CHAT_FRAME:AddMessage("|cffff00ffSound:|r " .. spell .. ".mp3")
+		DEFAULT_CHAT_FRAME:AddMessage("|cffff00ff================================|r")
+	end
 	
 	local mp3Path = "Interface\\AddOns\\Rank14losSA\\Voice\\"..spell..".mp3"
 	PlaySoundFile(mp3Path, "Master")

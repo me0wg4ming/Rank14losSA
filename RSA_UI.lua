@@ -15,8 +15,8 @@ function RSA_CreateAlertFrame()
 	if RSA_AlertFrame then return end
 	
 	RSA_AlertFrame = CreateFrame("Frame", "RSAAlertFrame", UIParent)
-	RSA_AlertFrame:SetWidth(300)
-	RSA_AlertFrame:SetHeight(32)
+	RSA_AlertFrame:SetWidth(250)
+	RSA_AlertFrame:SetHeight(28)
 	RSA_AlertFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 200)
 	RSA_AlertFrame:SetMovable(true)
 	RSA_AlertFrame:EnableMouse(false)
@@ -25,21 +25,21 @@ function RSA_CreateAlertFrame()
 	RSA_AlertFrame:SetFrameStrata("HIGH")
 	RSA_AlertFrame:SetHitRectInsets(10000, 10000, 10000, 10000)
 	
-	-- Bar
+	-- Icon (links)
+	RSA_AlertFrame.icon = RSA_AlertFrame:CreateTexture(nil, "ARTWORK")
+	RSA_AlertFrame.icon:SetWidth(28)
+	RSA_AlertFrame.icon:SetHeight(28)
+	RSA_AlertFrame.icon:SetPoint("LEFT", RSA_AlertFrame, "LEFT", 0, 0)
+	RSA_AlertFrame.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+	
+	-- Bar (startet NACH dem Icon, nicht darunter)
 	RSA_AlertFrame.bar = RSA_AlertFrame:CreateTexture(nil, "BACKGROUND")
 	RSA_AlertFrame.bar:SetTexture("Interface\\TargetingFrame\\UI-StatusBar")
 	local alpha = RSA_AlertFrameBgAlpha or 0.7
 	RSA_AlertFrame.bar:SetVertexColor(1.0, 0.7, 0.0, alpha)
-	RSA_AlertFrame.bar:SetPoint("LEFT", RSA_AlertFrame, "LEFT", 0, 0)
-	RSA_AlertFrame.bar:SetHeight(32)
+	RSA_AlertFrame.bar:SetPoint("LEFT", RSA_AlertFrame.icon, "RIGHT", 0, 0)  -- Startet rechts vom Icon
+	RSA_AlertFrame.bar:SetHeight(28)
 	RSA_AlertFrame.bar:SetWidth(0)
-	
-	-- Icon
-	RSA_AlertFrame.icon = RSA_AlertFrame:CreateTexture(nil, "OVERLAY")
-	RSA_AlertFrame.icon:SetWidth(32)
-	RSA_AlertFrame.icon:SetHeight(32)
-	RSA_AlertFrame.icon:SetPoint("LEFT", RSA_AlertFrame, "LEFT", 0, 0)
-	RSA_AlertFrame.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
 	
 	-- Text
 	RSA_AlertFrame.text = RSA_AlertFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -96,9 +96,25 @@ function RSA_CreateAlertFrame()
 				this.bar:SetWidth(this:GetWidth())
 				this.isCasting = false
 				this.timerText:SetText("")
-				this.fadeTime = 0
 				-- After cast ends, check for active buffs
-				RSA_ShowNextBuff()
+				if this.hadActiveBuffs or (this.activeBuffs and next(this.activeBuffs) ~= nil) then
+					-- We have buffs to show
+					RSA_ShowNextBuff()
+				elseif RSA_MoveMode then
+					-- Im Move-Mode: Zurück zum Platzhalter
+					this.text:SetText(">> DRAG TO MOVE <<")
+					this.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+					local textWidth = this.text:GetStringWidth()
+					local frameWidth = math.max(180, textWidth + 80)
+					this:SetWidth(frameWidth)
+					this.bar:SetWidth(frameWidth)
+					this.bar:SetVertexColor(0.5, 0.5, 0.5, RSA_AlertFrameBgAlpha or 0.7)
+					this.timerText:SetText("")
+				else
+					-- No buffs - start normal fade
+					this.fadeTime = 0
+				end
+				this.hadActiveBuffs = nil
 			else
 				this.bar:SetWidth(this:GetWidth() * progress)
 			end
@@ -129,16 +145,18 @@ function RSA_CreateAlertFrame()
 				end
 			end
 		else
-			-- Normal fade out
-			this.fadeTime = this.fadeTime + elapsed
-			if this.fadeTime > 2 then
-				local alpha = 1 - ((this.fadeTime - 2) / 0.5)
-				if alpha <= 0 then
-					this:Hide()
-					this:SetAlpha(1)
-					this.bar:SetWidth(0)
-				else
-					this:SetAlpha(alpha)
+			-- Normal fade out (nur wenn nicht im Move-Mode)
+			if not RSA_MoveMode then
+				this.fadeTime = this.fadeTime + elapsed
+				if this.fadeTime > 2 then
+					local alpha = 1 - ((this.fadeTime - 2) / 0.5)
+					if alpha <= 0 then
+						this:Hide()
+						this:SetAlpha(1)
+						this.bar:SetWidth(0)
+					else
+						this:SetAlpha(alpha)
+					end
 				end
 			end
 		end
@@ -154,7 +172,6 @@ end
 function RSA_ShowAlert(spellName, playerName, casterGUID, castDuration, spellID)
 	if not RSA_AlertFrame then return end
 	if not RSA_AlertFrameEnabled then return end
-	if RSA_MoveMode then return end
 	
 	-- Initialize active buffs tracking
 	if not RSA_AlertFrame.activeBuffs then
@@ -170,7 +187,8 @@ function RSA_ShowAlert(spellName, playerName, casterGUID, castDuration, spellID)
 	end
 	
 	local isFadeCheck = spellName and string.sub(spellName, -4) == "down"
-	local isNewCast = castDuration and castDuration > 0 and not isFadeCheck
+	-- castDuration kommt in Millisekunden von UNIT_CASTEVENT, muss also > 0 sein
+	local isNewCast = castDuration and tonumber(castDuration) and tonumber(castDuration) > 0 and not isFadeCheck
 	
 	local displayName = spellName
 	local isFade = false
@@ -187,12 +205,17 @@ function RSA_ShowAlert(spellName, playerName, casterGUID, castDuration, spellID)
 		RSA_AlertFrame.activeBuffs[buffKey] = nil
 		-- Show fade alert briefly, then switch to next buff
 		RSA_DisplayAlert(spellName, playerName, casterGUID, nil, spellID, true)
+		-- Don't return - let RSA_ShowNextBuff handle what to show next
+		RSA_ShowNextBuff()
 		return
 	end
 	
-	-- For casts, just show immediately (don't track as buff)
-	if isNewCast then
+	-- For casts, show immediately and interrupt any active display
+	if isNewCast then		
 		-- Casts take priority - show immediately
+		-- Clear any buff timer state to show the cast
+		RSA_AlertFrame.isBuffTimer = false
+		RSA_AlertFrame.currentBuffKey = nil
 		RSA_DisplayAlert(spellName, playerName, casterGUID, castDuration, spellID, isTarget)
 		return
 	end
@@ -271,12 +294,25 @@ function RSA_ShowNextBuff()
 		RSA_DisplayBuffAlert(bestBuff, remaining)
 		RSA_AlertFrame.currentBuffKey = bestKey
 	else
-		-- No active buffs - hide immediately
+		-- No active buffs - only hide if not currently casting AND not in move mode
 		RSA_AlertFrame.currentBuffKey = nil
-		RSA_AlertFrame.isBuffTimer = false
-		RSA_AlertFrame:Hide()
-		RSA_AlertFrame.bar:SetWidth(0)
-		RSA_AlertFrame.timerText:SetText("")
+		if not RSA_AlertFrame.isCasting and not RSA_MoveMode then
+			RSA_AlertFrame.isBuffTimer = false
+			RSA_AlertFrame:Hide()
+			RSA_AlertFrame.bar:SetWidth(0)
+			RSA_AlertFrame.timerText:SetText("")
+		elseif RSA_MoveMode then
+			-- Im Move-Mode: Zurück zum Platzhalter
+			RSA_AlertFrame.isBuffTimer = false
+			RSA_AlertFrame.text:SetText(">> DRAG TO MOVE <<")
+			RSA_AlertFrame.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+			local textWidth = RSA_AlertFrame.text:GetStringWidth()
+			local frameWidth = math.max(180, textWidth + 80)
+			RSA_AlertFrame:SetWidth(frameWidth)
+			RSA_AlertFrame.bar:SetWidth(frameWidth)
+			RSA_AlertFrame.bar:SetVertexColor(0.5, 0.5, 0.5, RSA_AlertFrameBgAlpha or 0.7)
+			RSA_AlertFrame.timerText:SetText("")
+		end
 	end
 end
 
@@ -308,7 +344,7 @@ function RSA_DisplayBuffAlert(buff, remaining)
 	
 	-- Resize
 	local textWidth = RSA_AlertFrame.text:GetStringWidth()
-	local frameWidth = math.max(220, textWidth + 105)
+	local frameWidth = math.max(100, textWidth + 80)
 	RSA_AlertFrame:SetWidth(frameWidth)
 	
 	RSA_AlertFrame.trackingGUID = buff.casterGUID
@@ -342,6 +378,10 @@ end
 
 function RSA_DisplayAlert(spellName, playerName, casterGUID, castDuration, spellID, isTarget)
 	if not RSA_AlertFrame then return end
+	
+	-- DEBUG
+	if castDuration and tonumber(castDuration) and tonumber(castDuration) > 0 then
+	end
 	
 	local displayName = spellName
 	local isFade = false
@@ -385,23 +425,29 @@ function RSA_DisplayAlert(spellName, playerName, casterGUID, castDuration, spell
 	
 	-- Resize
 	local textWidth = RSA_AlertFrame.text:GetStringWidth()
-	local frameWidth = math.max(220, textWidth + 105)
+	local frameWidth = math.max(180, textWidth + 80)
 	RSA_AlertFrame:SetWidth(frameWidth)
 	
 	RSA_AlertFrame.trackingGUID = casterGUID
 	local sliderAlpha = RSA_AlertFrameBgAlpha or 0.7
 	
-	if castDuration and castDuration > 0 and not isFade then
+	if castDuration and tonumber(castDuration) and tonumber(castDuration) > 0 and not isFade then
 		-- CAST: Bar fills from 0 to 100% (red)
-		RSA_AlertFrame.castTime = castDuration / 1000
+		-- Store current buff state to restore after cast
+		RSA_AlertFrame.hadActiveBuffs = (RSA_AlertFrame.activeBuffs and next(RSA_AlertFrame.activeBuffs) ~= nil)
+		RSA_AlertFrame.castTime = tonumber(castDuration) / 1000
 		RSA_AlertFrame.castElapsed = 0
 		RSA_AlertFrame.isCasting = true
 		RSA_AlertFrame.isBuffTimer = false
+		RSA_AlertFrame.buffEndTime = nil  -- Clear buff timer
 		RSA_AlertFrame.bar:SetWidth(0)
-		RSA_AlertFrame.bar:SetVertexColor(1.0, 0.3, 0.0, 1.0)
+		RSA_AlertFrame.bar:SetVertexColor(1.0, 0.7, 0.0, sliderAlpha)
 		RSA_AlertFrame.bar:SetAlpha(0.7)
 		RSA_AlertFrame.bar:Show()
 		RSA_AlertFrame.timerText:SetText("")
+		RSA_AlertFrame:SetAlpha(1)  -- Ensure frame is visible
+		RSA_AlertFrame:Show()  -- Show the frame!
+		RSA_AlertFrame.fadeTime = 0  -- Reset fade timer
 	else
 		-- INSTANT or FADE: Full bar
 		RSA_AlertFrame.castTime = 0
@@ -432,83 +478,40 @@ function RSA_ToggleMoveMode()
 		if not RSA_AlertFrame then RSA_CreateAlertFrame() end
 		RSA_AlertFrame:EnableMouse(true)
 		RSA_AlertFrame:SetHitRectInsets(0, 0, 0, 0)
-		RSA_AlertFrame.text:SetText(">> DRAG TO MOVE <<")
-		RSA_AlertFrame.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
-		RSA_AlertFrame:SetWidth(250)
-		RSA_AlertFrame.bar:SetWidth(250)
-		RSA_AlertFrame.bar:SetAlpha(1)
-		RSA_AlertFrame.bar:SetVertexColor(0.5, 0.5, 0.5, RSA_AlertFrameBgAlpha or 0.7)
-		RSA_AlertFrame.isCasting = false
-		RSA_AlertFrame.isBuffTimer = false
-		RSA_AlertFrame.timerText:SetText("")
-		RSA_AlertFrame:SetAlpha(1)
-		RSA_AlertFrame:Show()
-		RSA_AlertFrame:SetScript("OnUpdate", nil)
+		
+		-- Nur Platzhalter anzeigen wenn KEIN aktiver Alert läuft
+		if not RSA_AlertFrame:IsVisible() or (not RSA_AlertFrame.isCasting and not RSA_AlertFrame.isBuffTimer) then
+			RSA_AlertFrame.text:SetText(">> DRAG TO MOVE <<")
+			RSA_AlertFrame.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+			
+			-- Dynamische Größe wie bei normalen Alerts
+			local textWidth = RSA_AlertFrame.text:GetStringWidth()
+			local frameWidth = math.max(180, textWidth + 80)
+			RSA_AlertFrame:SetWidth(frameWidth)
+			RSA_AlertFrame.bar:SetWidth(frameWidth)
+			RSA_AlertFrame.bar:SetAlpha(1)
+			RSA_AlertFrame.bar:SetVertexColor(0.5, 0.5, 0.5, RSA_AlertFrameBgAlpha or 0.7)
+			RSA_AlertFrame.isCasting = false
+			RSA_AlertFrame.isBuffTimer = false
+			RSA_AlertFrame.timerText:SetText("")
+			RSA_AlertFrame:SetAlpha(1)
+			RSA_AlertFrame:Show()
+		end
+		-- Wenn Timer aktiv ist, bleibt alles sichtbar und läuft weiter
+		
 		DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00[RSA]|r Alert Frame move mode |cff00ff00ENABLED|r")
 	else
 		RSA_AlertFrame:EnableMouse(false)
 		RSA_AlertFrame:SetHitRectInsets(10000, 10000, 10000, 10000)
-		RSA_AlertFrame:Hide()
-		RSA_AlertFrame.bar:SetWidth(0)
-		RSA_AlertFrame.timerText:SetText("")
 		
-		RSA_AlertFrame:SetScript("OnUpdate", function()
-			if not this:IsVisible() then return end
-			local elapsed = arg1
-			
-			if this.isCasting and this.castTime > 0 then
-				-- CAST: Bar fills up
-				this.castElapsed = this.castElapsed + elapsed
-				local progress = this.castElapsed / this.castTime
-				this.timerText:SetText(string.format("%.1f / %.1f", this.castElapsed, this.castTime))
-				if progress >= 1 then
-					this.bar:SetWidth(this:GetWidth())
-					this.isCasting = false
-					this.timerText:SetText("")
-					this.fadeTime = 0
-					RSA_ShowNextBuff()
-				else
-					this.bar:SetWidth(this:GetWidth() * progress)
-				end
-			elseif this.isBuffTimer and this.buffEndTime then
-				-- BUFF: Use absolute end time
-				local now = GetTime()
-				local remaining = this.buffEndTime - now
-				
-				if remaining <= 0 then
-					if this.currentBuffKey then
-						this.activeBuffs[this.currentBuffKey] = nil
-					end
-					this.isBuffTimer = false
-					this.bar:SetWidth(0)
-					this.timerText:SetText("")
-					RSA_ShowNextBuff()
-					if not this.isBuffTimer then
-						this.fadeTime = 0
-					end
-				else
-					local progress = remaining / this.buffDuration
-					this.bar:SetWidth(this:GetWidth() * progress)
-					-- Only show timer if not hidden
-					if not this.hideTimer then
-						this.timerText:SetText(string.format("%.1f", remaining))
-					end
-				end
-			else
-				-- Normal fade out
-				this.fadeTime = this.fadeTime + elapsed
-				if this.fadeTime > 2 then
-					local alpha = 1 - ((this.fadeTime - 2) / 0.5)
-					if alpha <= 0 then
-						this:Hide()
-						this:SetAlpha(1)
-						this.bar:SetWidth(0)
-					else
-						this:SetAlpha(alpha)
-					end
-				end
-			end
-		end)
+		-- Nur verstecken wenn KEIN aktiver Alert läuft
+		if not RSA_AlertFrame.isCasting and not RSA_AlertFrame.isBuffTimer then
+			RSA_AlertFrame:Hide()
+			RSA_AlertFrame.bar:SetWidth(0)
+			RSA_AlertFrame.timerText:SetText("")
+		end
+		-- OnUpdate Script läuft bereits weiter von RSA_CreateAlertFrame()
+		
 		DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00[RSA]|r Alert Frame move mode |cffff0000DISABLED|r")
 	end
 end

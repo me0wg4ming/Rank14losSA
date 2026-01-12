@@ -113,6 +113,7 @@ RSA_BUFF_SPELL_IDS = {
 	[23505] = "Trinket",
 	[52317] = "Trinket",  -- PvP Trinket - Turtle WoW
 	[7744] = "WilloftheForsaken",
+	[6615] = "FreeAction",
 }
 
 -- Item/Ability Use Spell IDs
@@ -182,6 +183,7 @@ RSA_FADE_BUFF_PATTERNS = {
 	["Nature'sGrasp"] = "nature's grasp",
 	["Stoneform"] = "stoneform",
 	["WilloftheForsaken"] = "will of the forsaken",
+	["FreeAction"] = "free action",
 }
 
 -- Item Icons
@@ -219,6 +221,7 @@ RSA_BUFF_DURATIONS = {
 	["FrenziedRegeneration"] = 10,
 	["BlessingofFreedom"] = 10,
 	["Nature'sGrasp"] = 45,
+	["FreeAction"] = 30,
 }
 
 -- Buffs that show for 5s without timer (instant/consume abilities)
@@ -294,7 +297,7 @@ RSA_SOUND_OPTION_TEXT = {
 	"Mana Tide Totem", "Nature's Grasp", "Nature's Swiftness", "Power Infusion",
 	"Presence of Mind", "Rapid Fire", "Recklessness", "Reflector", "Retaliation",
 	"Sacrifice", "Shield Wall", "Sprint", "Stone form", "Sweeping Strikes",
-	"Tranquility", "Tremor Totem", "Trinket", "Will of the Forsaken",
+	"Tranquility", "Tremor Totem", "Trinket", "Will of the Forsaken", "Free Action",
 	"",
 	"When an enemy starts casting:",
 	"Entangling Roots", "Escape Artist", "Fear", "Hearthstone", "Hibernate",
@@ -311,7 +314,7 @@ RSA_SOUND_OPTION_TEXT = {
 	"Dash", "Death Wish", "Deterrence", "Divine Shield", "Evasion",
 	"Frenzied Regeneration", "Ice Block", "Innervate", "Last Stand", "Nature's Grasp",
 	"Rapid Fire", "Recklessness", "Retaliation", "Shield Wall", "Sprint",
-	"Stoneform", "Will of the Forsaken",
+	"Stoneform", "Will of the Forsaken", "Free Action",
 	"",
 	"When an enemy uses an ability:",
 	"Kick", "Flash Bomb",
